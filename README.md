@@ -149,6 +149,8 @@ Sesión de panel (cookie). Mutaciones aceptan `Idempotency-Key` y `x-turno-versi
 
 Capas: `src/lib/modules/agenda/{domain,application,infrastructure}` — ver `docs/DOMAIN_SERVICES.md`.
 
+**Transiciones:** body `{ "estado": "recibido", "version": N }` — alias legacy `nuevoEstado` aceptado si falta `estado`.
+
 ## Tests
 
 ```bash
