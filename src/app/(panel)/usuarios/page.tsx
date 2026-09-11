@@ -1,13 +1,9 @@
-import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 import { ProximamentePlaceholder } from "@/components/layout/ProximamentePlaceholder";
 
 export default async function UsuariosPage() {
-  const session = await getAuthSession();
-
-  if (!canAccessPanelRoute(session.rol, "/usuarios")) redirect("/agenda");
+  await getAuthSession();
 
   return (
     <div className="p-6 lg:p-8">

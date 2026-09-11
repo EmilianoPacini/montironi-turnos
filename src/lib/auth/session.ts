@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { RolUsuario } from "@prisma/client";
+import { assertPanelAccess } from "@/lib/auth/access";
 import {
   clearCookieSession,
   getCookieSession,
@@ -34,9 +35,7 @@ export async function requireSession(): Promise<AuthSession> {
 
 export async function requireAdmin(): Promise<AuthSession> {
   const session = await requireSession();
-  if (session.rol !== RolUsuario.admin) {
-    throw new Error("FORBIDDEN");
-  }
+  assertPanelAccess({ rol: session.rol, roles: [RolUsuario.admin] });
   return session;
 }
 

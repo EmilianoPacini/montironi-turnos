@@ -1,13 +1,10 @@
-import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
-import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listMovimientosForDisplay } from "@/lib/modules/audit/movimiento.service";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 
 export default async function MovimientosPage() {
   const session = await getAuthSession();
-  if (!canAccessPanelRoute(session.rol, "/movimientos")) redirect("/agenda");
 
   const movimientos = await listMovimientosForDisplay(session.empresaId, 100);
 

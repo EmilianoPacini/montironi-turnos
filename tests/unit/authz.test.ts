@@ -5,7 +5,7 @@ import {
   assertAdminRole,
   canAccessPanelRoute,
   isAdminOnlyPath,
-} from "@/lib/auth/guards";
+} from "@/lib/auth/access";
 
 describe("QA-7 · Authz admin vs empleado", () => {
   it("identifica rutas solo admin", () => {
@@ -41,5 +41,10 @@ describe("QA-7 · Authz admin vs empleado", () => {
   it("assertAdminRole rechaza empleado", () => {
     expect(() => assertAdminRole(RolUsuario.empleado)).toThrow("FORBIDDEN");
     expect(() => assertAdminRole(RolUsuario.admin)).not.toThrow();
+  });
+
+  it("roles no mapeados (operador, asesor) quedan denegados", () => {
+    expect(canAccessPanelRoute(RolUsuario.operador, "/agenda")).toBe(false);
+    expect(canAccessPanelRoute(RolUsuario.asesor, "/clientes")).toBe(false);
   });
 });
