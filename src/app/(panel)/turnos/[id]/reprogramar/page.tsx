@@ -51,12 +51,18 @@ export default async function ReprogramarPage({
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Bahía</span>
           <select name="bahiaId" defaultValue={turno.bahiaId} className="w-full rounded-lg border px-3 py-2">
+            <option value="">
+              Automático — asignar si hay exactamente una bahía compatible libre
+            </option>
             {bahias.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.nombre}
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Selección manual siempre permitida. Automático solo cuando hay una bahía libre.
+          </p>
         </label>
 
         <label className="block text-sm">

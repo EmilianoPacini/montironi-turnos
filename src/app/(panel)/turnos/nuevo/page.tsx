@@ -30,12 +30,10 @@ export default async function NuevoTurnoPage({
   const inicioParam = typeof params.inicio === "string" ? params.inicio : undefined;
   const date = inicioParam ? startOfDay(parseISO(inicioParam)) : startOfDay(new Date());
 
-  const bahias = talleres.find((t) => t.id === tallerId)?.bahias ?? [];
   const compatibleBahias = await getCompatibleBahias(
     tallerId,
-    servicios.slice(0, 1).map((s) => s.id)
+    servicios.map((s) => s.id)
   );
-  const autoBahia = compatibleBahias.length === 1;
 
   return (
     <div className="p-6 lg:p-8">
@@ -88,35 +86,27 @@ export default async function NuevoTurnoPage({
           </div>
         </fieldset>
 
-        <div className="block text-sm">
+        <label className="block text-sm">
           <span className="mb-1 block font-medium">Bahía</span>
-          {autoBahia ? (
-            <>
-              <input type="hidden" name="bahiaId" value={compatibleBahias[0].id} />
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
-                Se asignará automáticamente: {compatibleBahias[0].nombre}
-              </p>
-            </>
-          ) : (
-            <>
-              <select
-                name="bahiaId"
-                defaultValue={bahiaId ?? ""}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              >
-                <option value="">Auto si hay una sola compatible</option>
-                {bahias.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.nombre}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-500">
-                Con varias bahías compatibles disponibles, seleccioná una explícitamente.
-              </p>
-            </>
-          )}
-        </div>
+          <select
+            name="bahiaId"
+            defaultValue={bahiaId ?? ""}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          >
+            <option value="">
+              Automático — asignar si hay exactamente una bahía compatible libre
+            </option>
+            {compatibleBahias.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nombre} (selección manual)
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Podés elegir una bahía manualmente en cualquier momento. Si dejás automático y
+            hay varias bahías libres, se pedirá selección explícita.
+          </p>
+        </label>
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Fecha y hora de inicio</span>

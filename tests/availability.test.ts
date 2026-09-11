@@ -208,6 +208,36 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     expect(updated?.estado).toBe(EstadoTurno.vencido);
   });
 
+  it("no aplica ausente automáticamente — solo manual", async () => {
+    const past = addMinutes(new Date(), -60);
+    const turno = await createTurno({
+      empresaId,
+      tallerId,
+      bahiaId: bahia2Id,
+      clienteId,
+      vehiculoId,
+      servicioIds: [servicioId],
+      inicio: past,
+      confirmar: true,
+    });
+
+    await expirePendingTurnos(empresaId);
+
+    const afterExpire = await prisma.turno.findUnique({ where: { id: turno.id } });
+    expect(afterExpire?.estado).toBe(EstadoTurno.confirmado);
+
+    const { transitionTurnoState } = await import("@/lib/modules/appointments/service");
+    await transitionTurnoState({
+      turnoId: turno.id,
+      empresaId,
+      nuevoEstado: EstadoTurno.ausente,
+      version: turno.version,
+    });
+
+    const manual = await prisma.turno.findUnique({ where: { id: turno.id } });
+    expect(manual?.estado).toBe(EstadoTurno.ausente);
+  });
+
   it("impide bloqueo superpuesto", async () => {
     const blockStart = addMinutes(slotInicio, 420);
     await blockBahia({

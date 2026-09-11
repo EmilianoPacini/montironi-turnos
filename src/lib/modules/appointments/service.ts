@@ -48,6 +48,7 @@ export async function resolveBahiaAssignment(params: {
   }
 
   if (params.bahiaId) {
+    // Manual override always wins when compatible and available.
     if (!compatible.some((b) => b.id === params.bahiaId)) {
       throw new AppointmentError("Bahía incompatible con los servicios", "INCOMPATIBLE_BAY");
     }

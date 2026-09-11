@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getAuthSession } from "@/lib/auth/session";
-import { getTurnoById } from "@/lib/modules/appointments/service";
+import { getTurnoById, expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { EstadoChip } from "@/components/turnos/EstadoChip";
 import {
   VALID_TRANSITIONS,
@@ -22,6 +22,7 @@ export default async function TurnoDetailPage({
   const session = await getAuthSession();
 
   const { id } = await params;
+  await expirePendingTurnos(session.empresaId);
   const turno = await getTurnoById(id, session.empresaId);
   if (!turno) notFound();
 

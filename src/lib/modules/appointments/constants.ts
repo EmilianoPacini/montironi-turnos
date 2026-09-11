@@ -27,7 +27,7 @@ export const MODO_PRECIO_LABELS: Record<string, string> = {
   a_presupuestar: "A presupuestar",
 };
 
-/** Manual transitions only. vencido is automatic (pendiente → vencido on expiry). */
+/** Manual transitions only. The only automatic transition is pendiente → vencido (see expirePendingTurnos). ausente/recibido/en_servicio/finalizado are never automatic. */
 export const VALID_TRANSITIONS: Record<EstadoTurno, EstadoTurno[]> = {
   pendiente: [EstadoTurno.confirmado, EstadoTurno.cancelado],
   confirmado: [EstadoTurno.recibido, EstadoTurno.cancelado, EstadoTurno.ausente],
