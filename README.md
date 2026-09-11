@@ -50,6 +50,8 @@ Abrí [http://localhost:43123](http://localhost:43123)
 | Admin     | admin@montironi.com      | admin123     |
 | Empleado  | empleado@montironi.com   | empleado123  |
 
+V1 del panel usa solo roles `admin` y `empleado` (el enum incluye también `operador` y `asesor`).
+
 ## Scripts útiles
 
 | Comando           | Descripción                          |
@@ -70,9 +72,23 @@ Monolito modular en Next.js App Router:
 - `src/lib/modules/customers` — clientes y vehículos
 - `src/lib/modules/agents-api` — idempotencia y autenticación por API key
 
+### Esquema PostgreSQL (autoritativo)
+
+Migración única: `prisma/migrations/20260911152000_authoritative_init/migration.sql`
+
+- Extensiones: `pgcrypto`, `btree_gist`
+- 21 tablas con PKs UUID (`gen_random_uuid()`)
+- Enums: `estado_turno`, `canal_turno`, `rol_usuario`, `tipo_ocupacion`, etc.
+- `turno.finaliza_en` = suma de duraciones en `detalle_turno` + `configuracion_turnos.margen_minutos`
+- `turno.version` para optimistic locking; `operacion_api` UNIQUE `(empresa_id, idempotency_key)`
+- `ocupacion_bahia`: `periodo tstzrange` + `EXCLUDE USING gist (bahia_id WITH =, periodo WITH &&) WHERE (activo)`
+- Bloqueos manuales: `tipo='bloqueo'`, `turno_id` NULL, `motivo` opcional (sin turno ficticio)
+
+Para resetear desde cero: `npx prisma migrate reset --force`
+
 ### Capacidad
 
-Un turno ocupa una bahía de `inicio` a `fin` = suma de duraciones en `detalle_turno` + margen del taller (`configuracion_turnos.margen_min` por taller).
+Un turno ocupa una bahía desde `inicio` hasta `finaliza_en` (calculado como arriba).
 
 - Consultar disponibilidad **no reserva**
 - Al confirmar/crear se revalida y se inserta en `ocupacion_bahia`
@@ -91,7 +107,9 @@ Headers:
 
 - `x-api-key`: valor de `AGENT_API_KEY`
 - `x-empresa`: slug de empresa (default `montironi`)
-- `idempotency-key`: opcional, para operaciones idempotentes
+- `idempotency-key`: opcional, para operaciones idempotentes (persistido en `operacion_api.idempotency_key`)
+
+El body acepta `canal` (`web`, `telefono`, `whatsapp`, `interno`, `agente_ia`); `origen` se mapea por compatibilidad.
 
 Acciones POST (`action` en body):
 
