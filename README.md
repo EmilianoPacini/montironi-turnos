@@ -72,13 +72,16 @@ Monolito modular en Next.js App Router:
 
 ### Capacidad
 
-Un turno ocupa una bahía de `inicio` a `fin` = suma de duraciones en `detalle_turno` + margen (`configuracion_turnos.margen_min`).
+Un turno ocupa una bahía de `inicio` a `fin` = suma de duraciones en `detalle_turno` + margen del taller (`configuracion_turnos.margen_min` por taller).
 
 - Consultar disponibilidad **no reserva**
 - Al confirmar/crear se revalida y se inserta en `ocupacion_bahia`
 - PostgreSQL `EXCLUDE` evita solapamientos activos por bahía
+- **Bahía:** si hay exactamente una bahía compatible y libre, se asigna sola; si hay varias, hay que elegir
 - Reprogramación con conflicto mantiene el slot anterior
 - Optimistic locking vía `turno.version`
+- **Estados:** única transición automática `pendiente → vencido` al pasar la hora de inicio sin confirmar; el resto es manual
+- **Precios:** modos `fijo`, `desde`, `a_presupuestar` (informativos en V1); se snapshotean en `detalle_turno` al reservar
 
 ## API para agentes
 
