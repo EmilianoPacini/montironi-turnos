@@ -1,8 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { removeBlockAction } from "@/lib/modules/appointments/actions";
+import { useActionTransition } from "@/components/turnos/use-action-transition";
 
 export function BlockTile({
   blockId,
@@ -17,21 +16,13 @@ export function BlockTile({
   motivo?: string | null;
   autor?: string;
 }) {
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
+  const { pending, runAction } = useActionTransition();
 
   function handleRemove(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm("¿Quitar este bloqueo de bahía?")) return;
-    startTransition(async () => {
-      const result = await removeBlockAction(blockId);
-      if (result && "error" in result) {
-        alert(result.error);
-        return;
-      }
-      router.refresh();
-    });
+    runAction(() => removeBlockAction(blockId));
   }
 
   return (

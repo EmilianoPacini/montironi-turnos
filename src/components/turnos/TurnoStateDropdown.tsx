@@ -1,7 +1,5 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { EstadoTurno } from "@prisma/client";
 import {
   confirmTurnoAction,
@@ -9,6 +7,7 @@ import {
   cancelTurnoAction,
 } from "@/lib/modules/appointments/actions";
 import { TURNO_STATE_COLORS, VALID_TRANSITIONS } from "@/lib/modules/appointments/constants";
+import { useActionTransition } from "@/components/turnos/use-action-transition";
 
 export function TurnoStateDropdown({
   turnoId,
@@ -19,22 +18,10 @@ export function TurnoStateDropdown({
   version: number;
   estado: EstadoTurno;
 }) {
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
+  const { pending, runAction } = useActionTransition();
 
   const options = VALID_TRANSITIONS[estado].filter((t) => t !== EstadoTurno.cancelado);
   const canCancel = VALID_TRANSITIONS[estado].includes(EstadoTurno.cancelado);
-
-  function run(action: () => Promise<unknown>) {
-    startTransition(async () => {
-      const result = await action();
-      if (result && typeof result === "object" && "error" in result) {
-        alert((result as { error: string }).error);
-        return;
-      }
-      router.refresh();
-    });
-  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -42,7 +29,7 @@ export function TurnoStateDropdown({
         <button
           type="button"
           disabled={pending}
-          onClick={() => run(() => confirmTurnoAction(turnoId, version))}
+          onClick={() => runAction(() => confirmTurnoAction(turnoId, version))}
           className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
         >
           Confirmar
@@ -60,7 +47,7 @@ export function TurnoStateDropdown({
               const next = e.target.value as EstadoTurno;
               if (!next) return;
               e.target.value = "";
-              run(() => transitionTurnoAction(turnoId, next, version));
+              runAction(() => transitionTurnoAction(turnoId, next, version));
             }}
           >
             <option value="">Cambiar a…</option>
@@ -82,7 +69,7 @@ export function TurnoStateDropdown({
           disabled={pending}
           onClick={() => {
             if (confirm("¿Cancelar este turno?")) {
-              run(() => cancelTurnoAction(turnoId, version));
+              runAction(() => cancelTurnoAction(turnoId, version));
             }
           }}
           className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
