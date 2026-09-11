@@ -54,6 +54,15 @@ describe("middleware · Edge cookie gate (B5)", () => {
     expect(response.status).toBe(200);
   });
 
+  it("non-jobs /api/v1/* still requires cookie at Edge", async () => {
+    const response = runMiddleware("/api/v1/turnos");
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: "No autorizado",
+      code: "UNAUTHORIZED",
+    });
+  });
+
   it("new unlisted panel path is blocked without cookie (fail-closed)", () => {
     const response = runMiddleware("/futuro-modulo");
     expect(response.status).toBe(307);

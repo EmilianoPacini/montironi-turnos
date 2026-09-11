@@ -17,7 +17,7 @@ Edge answers: “Is there a session cookie?” Node answers: “Is the session v
 - `/api/agents` and `/api/agents/*` — API key validated in handler
 - `/api/wah/integration/*` — `X-Cima-Forward-Secret` in handler
 - `/api/webhooks/*` — forward secret in handler
-- `/api/v1/jobs/*` — cron uses `x-api-key` **or** admin session inside handler (AppSec-approved exception)
+- `/api/v1/jobs/*` — cron uses `x-api-key` **or** admin session inside handler (AppSec-approved exception). **Only** this prefix is machine-exempt at Edge; all other `/api/v1/*` routes still require a session cookie.
 - Static assets (`/_next/*`, favicons, images)
 
 **Everything else requires a session cookie at Edge** (fail-closed). New panel routes under `(panel)` are protected automatically without updating a path allow-list.
@@ -47,6 +47,10 @@ Set on all middleware responses:
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
+
+## Follow-up (B7)
+
+Post-B5 cron jobs should use a **dedicated secret** (e.g. `CRON_API_KEY`) distinct from `AGENT_API_KEY`. Today `vencer-pendientes` reuses `AGENT_API_KEY` for backward compatibility; split in B7 to limit blast radius if one key leaks.
 
 ## Related docs
 

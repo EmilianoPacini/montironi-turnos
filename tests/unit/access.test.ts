@@ -62,8 +62,18 @@ describe("access.ts · fail-closed path classifier", () => {
   it("protected paths require cookie (including unlisted new panel paths)", () => {
     expect(requiresSessionCookie("/agenda")).toBe(true);
     expect(requiresSessionCookie("/api/v1/clientes/context")).toBe(true);
+    expect(requiresSessionCookie("/api/v1/turnos")).toBe(true);
     expect(requiresSessionCookie("/api/wah/dashboard")).toBe(true);
     expect(requiresSessionCookie("/nuevo-modulo-panel")).toBe(true);
+  });
+
+  it("only /api/v1/jobs/* is machine-exempt — other /api/v1/* require cookie at Edge", () => {
+    expect(isPublicPath("/api/v1/jobs/vencer-pendientes")).toBe(true);
+    expect(isPublicPath("/api/v1/jobs/future-job")).toBe(true);
+    expect(isPublicPath("/api/v1/clientes/context")).toBe(false);
+    expect(isPublicPath("/api/v1/turnos")).toBe(false);
+    expect(requiresSessionCookie("/api/v1/jobs/vencer-pendientes")).toBe(false);
+    expect(requiresSessionCookie("/api/v1/turnos")).toBe(true);
   });
 
   it("static assets skip cookie gate", () => {

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { RolUsuario } from "@prisma/client";
 import { GET as agentsGet } from "@/app/api/agents/route";
 import { GET as getClienteContext } from "@/app/api/v1/clientes/context/route";
+import { POST as vencerPendientesJob } from "@/app/api/v1/jobs/vencer-pendientes/route";
 import { POST as createBahiaPost } from "@/app/api/v1/talleres/[tallerId]/bahias/route";
 import { POST as sendTextPost } from "@/app/api/wah/integration/send-text/route";
 import { middleware } from "@/middleware";
@@ -150,5 +151,44 @@ describe("B5 · central authz gate (integration)", () => {
 
   it("Edge pass + cookie name constant matches iron-session", () => {
     expect(SESSION_COOKIE_NAME).toBe("montironi_session");
+  });
+
+  it("8a · jobs: no cookie + valid x-api-key → 200 (middleware exempt, handler dual-auth)", async () => {
+    clearSessionCookie();
+    const apiKey = process.env.AGENT_API_KEY!;
+
+    const edge = middleware(
+      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", { method: "POST" })
+    );
+    expect(edge.status).toBe(200);
+
+    const response = await vencerPendientesJob(
+      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "x-empresa": fx.empresaSlug,
+        },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ vencidos: expect.any(Number) });
+  });
+
+  it("8b · jobs: no cookie and no key → 401 (handler fail-closed)", async () => {
+    clearSessionCookie();
+
+    const edge = middleware(
+      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", { method: "POST" })
+    );
+    expect(edge.status).toBe(200);
+
+    const response = await vencerPendientesJob(
+      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", { method: "POST" })
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: expect.any(String) });
   });
 });
