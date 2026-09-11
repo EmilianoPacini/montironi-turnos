@@ -96,7 +96,7 @@ export default async function ServiciosPage() {
         </label>
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white"
+          className="btn-primary-lg"
         >
           Crear servicio
         </button>
@@ -136,7 +136,7 @@ export default async function ServiciosPage() {
           <span className="mb-1 block font-medium">Intervalo (km)</span>
           <input name="intervaloKm" type="number" required min={1} defaultValue={10000} className="w-full rounded-lg border px-3 py-2" />
         </label>
-        <button type="submit" className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white">
+        <button type="submit" className="btn-primary-lg">
           Guardar intervalo
         </button>
       </form>

@@ -69,10 +69,10 @@ export default async function AgendaPage({
   });
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="panel-page">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Agenda diaria</h1>
+          <h1 className="panel-title">Agenda diaria</h1>
           <p className="text-sm capitalize text-slate-600">
             {format(date, "EEEE d 'de' MMMM yyyy", { locale: es })}
           </p>
@@ -80,7 +80,7 @@ export default async function AgendaPage({
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/turnos/nuevo?tallerId=${tallerId}`}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            className="btn-primary"
           >
             + Nuevo turno
           </Link>
@@ -101,7 +101,7 @@ export default async function AgendaPage({
         <Link
           href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: estadoFilter, canal: canalFilter, pendientes, vista: "grid" }).toString()}`}
           className={`rounded-lg px-3 py-2 text-sm font-medium ${
-            vista === "grid" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+            vista === "grid" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-700 hover:bg-blue-50"
           }`}
         >
           Grilla
@@ -109,7 +109,7 @@ export default async function AgendaPage({
         <Link
           href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: estadoFilter, canal: canalFilter, pendientes, vista: "lista" }).toString()}`}
           className={`rounded-lg px-3 py-2 text-sm font-medium ${
-            vista === "lista" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+            vista === "lista" ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-700 hover:bg-blue-50"
           }`}
         >
           Lista
@@ -188,7 +188,7 @@ function AgendaFilters({
         <Link
           href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, canal, pendientes }).toString()}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            !estado ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
+            !estado ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-blue-200"
           }`}
         >
           Todos
@@ -199,8 +199,8 @@ function AgendaFilters({
             href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: e.value, canal, pendientes }).toString()}`}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               estado === e.value
-                ? "bg-slate-900 text-white"
-                : "bg-white text-slate-600 ring-1 ring-slate-200"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-blue-200"
             }`}
           >
             {e.label}

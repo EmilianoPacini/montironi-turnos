@@ -11,12 +11,9 @@ export function ClienteSearchForm({ search }: { search?: string }) {
           type="search"
           placeholder="Buscar por nombre, teléfono, documento o patente…"
           defaultValue={search ?? ""}
-          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="input-field max-w-md"
         />
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-        >
+        <button type="submit" className="btn-primary">
           Buscar
         </button>
       </div>

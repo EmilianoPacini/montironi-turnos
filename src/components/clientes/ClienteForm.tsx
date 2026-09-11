@@ -96,7 +96,7 @@ export function ClienteForm({
       </label>
       <button
         type="submit"
-        className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white"
+        className="btn-primary-lg"
       >
         Guardar
       </button>

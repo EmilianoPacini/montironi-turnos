@@ -276,7 +276,7 @@ export function NuevoTurnoForm({
 
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+          className="btn-primary-lg"
         >
           Crear turno
         </button>
@@ -290,7 +290,7 @@ export function NuevoTurnoForm({
             <label className="block text-sm"><span className="mb-1 block">Apellido *</span><input name="apellido" required className="w-full rounded border px-3 py-2" /></label>
             <label className="block text-sm"><span className="mb-1 block">Teléfono E.164 *</span><input name="telefono" required placeholder="+5491112345678" className="w-full rounded border px-3 py-2" /></label>
             <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={clientePending} className="rounded bg-slate-900 px-4 py-2 text-sm text-white">Guardar</button>
+              <button type="submit" disabled={clientePending} className="btn-primary">Guardar</button>
               <button type="button" onClick={() => setShowClienteModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
             </div>
           </form>
@@ -299,12 +299,26 @@ export function NuevoTurnoForm({
 
       {showVehiculoModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={handleInlineVehiculo} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
-            <h3 className="font-semibold">Nuevo vehículo</h3>
+          <form
+            onSubmit={handleInlineVehiculo}
+            className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl"
+          >
+            <h3 className="text-lg font-semibold text-slate-900">Nuevo vehículo</h3>
+            <p className="text-sm text-slate-600">
+              Mismos campos que en la ficha del cliente.
+            </p>
             <VehiculoFields />
             <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={vehiculoPending} className="rounded bg-slate-900 px-4 py-2 text-sm text-white">Guardar</button>
-              <button type="button" onClick={() => setShowVehiculoModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
+              <button type="submit" disabled={vehiculoPending} className="btn-primary">
+                Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowVehiculoModal(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
             </div>
           </form>
         </div>

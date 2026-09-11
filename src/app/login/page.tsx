@@ -12,15 +12,13 @@ export default function LoginPage() {
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-700 via-blue-600 to-sky-500 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl shadow-blue-900/10">
         <div className="mb-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          <p className="text-sm font-semibold uppercase tracking-wider text-sky-600">
             Montironi
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">
-            Turnos de postventa
-          </h1>
+          <h1 className="mt-1 text-2xl font-bold text-blue-700">Cima AI</h1>
           <p className="mt-2 text-sm text-slate-600">
             Agenda compartida para taller y agentes
           </p>
@@ -37,7 +35,7 @@ export default function LoginPage() {
               type="email"
               required
               defaultValue="admin@montironi.com"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              className="input-field"
             />
           </div>
           <div>
@@ -50,7 +48,7 @@ export default function LoginPage() {
               type="password"
               required
               defaultValue="admin123"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              className="input-field"
             />
           </div>
 
@@ -60,17 +58,13 @@ export default function LoginPage() {
             </p>
           ) : null}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-          >
+          <button type="submit" disabled={pending} className="btn-primary-lg w-full">
             {pending ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
 
-        <div className="mt-6 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-          <p className="font-medium">Usuarios de prueba:</p>
+        <div className="mt-6 rounded-lg bg-sky-50 p-3 text-xs text-slate-600">
+          <p className="font-medium text-sky-900">Usuarios de prueba:</p>
           <p>Admin: admin@montironi.com / admin123</p>
           <p>Empleado: empleado@montironi.com / empleado123</p>
         </div>

@@ -3,11 +3,25 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-muted: #eff6ff;
+  --accent: #0ea5e9;
+  --accent-muted: #e0f2fe;
+  --surface: #ffffff;
+  --border: #e2e8f0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-muted: var(--primary-muted);
+  --color-accent: var(--accent);
+  --color-accent-muted: var(--accent-muted);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,4 +30,50 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@layer components {
+  .panel-card {
+    @apply overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .panel-page {
+    @apply p-6 lg:p-8;
+  }
+
+  .panel-title {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+
+  .panel-subtitle {
+    @apply mt-1 text-sm text-slate-600;
+  }
+
+  .btn-primary {
+    @apply rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50;
+  }
+
+  .btn-primary-lg {
+    @apply rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20;
+  }
+
+  .data-table thead {
+    @apply bg-slate-50 text-left text-slate-600;
+  }
+
+  .data-table th {
+    @apply px-4 py-3 font-medium;
+  }
+
+  .data-table td {
+    @apply px-4 py-3;
+  }
+
+  .data-table tbody tr {
+    @apply border-t border-slate-100 transition hover:bg-slate-50/80;
+  }
 }

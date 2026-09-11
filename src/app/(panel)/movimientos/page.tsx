@@ -2,42 +2,38 @@ import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
 import { canAccessPanelRoute } from "@/lib/auth/guards";
-import { listMovimientos } from "@/lib/modules/audit/movimiento.service";
+import { listMovimientosForDisplay } from "@/lib/modules/audit/movimiento.service";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 
 export default async function MovimientosPage() {
   const session = await getAuthSession();
   if (!canAccessPanelRoute(session.rol, "/movimientos")) redirect("/agenda");
 
-  const movimientos = await listMovimientos(session.empresaId, 100);
+  const movimientos = await listMovimientosForDisplay(session.empresaId, 100);
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="panel-page">
       <AdminOnlyBanner />
-      <h1 className="text-2xl font-bold">Movimientos (auditoría)</h1>
-      <p className="mt-1 text-sm text-slate-600">Registro append-only de mutaciones clave.</p>
+      <h1 className="panel-title">Movimientos</h1>
+      <p className="panel-subtitle">Registro append-only de mutaciones clave.</p>
 
-      <div className="mt-6 overflow-hidden rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left">
+      <div className="panel-card mt-6">
+        <table className="data-table w-full text-sm">
+          <thead>
             <tr>
-              <th className="px-4 py-3">Fecha</th>
-              <th className="px-4 py-3">Entidad</th>
-              <th className="px-4 py-3">Acción</th>
-              <th className="px-4 py-3">Usuario</th>
+              <th>Fecha</th>
+              <th>Descripción</th>
+              <th>Usuario</th>
             </tr>
           </thead>
           <tbody>
             {movimientos.map((m) => (
-              <tr key={m.id} className="border-t">
-                <td className="px-4 py-3 whitespace-nowrap">
+              <tr key={m.id}>
+                <td className="whitespace-nowrap text-slate-600">
                   {format(m.createdAt, "dd/MM/yyyy HH:mm")}
                 </td>
-                <td className="px-4 py-3">
-                  {m.entidad} · {m.entidadId.slice(0, 8)}…
-                </td>
-                <td className="px-4 py-3 font-medium">{m.accion}</td>
-                <td className="px-4 py-3">{m.usuario?.nombre ?? "—"}</td>
+                <td className="font-medium text-slate-900">{m.descripcion}</td>
+                <td className="text-slate-600">{m.usuario?.nombre ?? "—"}</td>
               </tr>
             ))}
           </tbody>
