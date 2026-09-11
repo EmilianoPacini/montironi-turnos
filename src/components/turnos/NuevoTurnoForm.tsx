@@ -1,8 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { format } from "date-fns";
-import { createTurnoAction, createClienteInlineAction, createVehiculoInlineAction } from "@/lib/modules/appointments/actions";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import {
+  createTurnoAction,
+  createClienteInlineAction,
+  createVehiculoInlineAction,
+  type TurnoFormState,
+} from "@/lib/modules/appointments/actions";
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
 import { VehiculoFields } from "@/components/clientes/VehiculoFields";
@@ -28,6 +33,27 @@ interface BahiaOption {
   nombre: string;
 }
 
+function splitInicio(inicio: string | undefined, defaultInicio?: string) {
+  if (inicio) {
+    const date = parseISO(inicio);
+    return {
+      fecha: format(date, "yyyy-MM-dd"),
+      hora: format(date, "HH:mm"),
+    };
+  }
+  if (defaultInicio) {
+    const date = new Date(defaultInicio);
+    return {
+      fecha: format(date, "yyyy-MM-dd"),
+      hora: format(date, "HH:mm"),
+    };
+  }
+  return {
+    fecha: format(new Date(), "yyyy-MM-dd"),
+    hora: "09:00",
+  };
+}
+
 export function NuevoTurnoForm({
   tallerId,
   clientes: initialClientes,
@@ -35,7 +61,6 @@ export function NuevoTurnoForm({
   compatibleBahias,
   defaultBahiaId,
   defaultInicio,
-  error,
 }: {
   tallerId: string;
   clientes: ClienteOption[];
@@ -43,22 +68,45 @@ export function NuevoTurnoForm({
   compatibleBahias: BahiaOption[];
   defaultBahiaId?: string;
   defaultInicio?: string;
-  error?: string;
 }) {
+  const initialSchedule = splitInicio(undefined, defaultInicio);
+  const [state, formAction, pending] = useActionState(
+    createTurnoAction,
+    undefined as TurnoFormState | undefined
+  );
+
   const [clientes, setClientes] = useState(initialClientes);
   const [clienteId, setClienteId] = useState("");
   const [vehiculoId, setVehiculoId] = useState("");
-  const [fecha, setFecha] = useState(
-    defaultInicio ? format(new Date(defaultInicio), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
-  );
-  const [hora, setHora] = useState(
-    defaultInicio ? format(new Date(defaultInicio), "HH:mm") : "09:00"
-  );
-  const [formError, setFormError] = useState<string | undefined>(error);
+  const [servicioIds, setServicioIds] = useState<string[]>([]);
+  const [bahiaId, setBahiaId] = useState(defaultBahiaId ?? "");
+  const [fecha, setFecha] = useState(initialSchedule.fecha);
+  const [hora, setHora] = useState(initialSchedule.hora);
+  const [kilometraje, setKilometraje] = useState("");
+  const [notas, setNotas] = useState("");
+  const [confirmar, setConfirmar] = useState(false);
+  const [inlineError, setInlineError] = useState<string | undefined>();
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [showVehiculoModal, setShowVehiculoModal] = useState(false);
   const [clientePending, setClientePending] = useState(false);
   const [vehiculoPending, setVehiculoPending] = useState(false);
+
+  useEffect(() => {
+    if (!state?.values) return;
+    const v = state.values;
+    setClienteId(v.clienteId);
+    setVehiculoId(v.vehiculoId);
+    setServicioIds(v.servicioIds);
+    setBahiaId(v.bahiaId);
+    const schedule = splitInicio(v.inicio);
+    setFecha(schedule.fecha);
+    setHora(schedule.hora);
+    setKilometraje(v.kilometraje);
+    setNotas(v.notas);
+    setConfirmar(v.confirmar);
+  }, [state?.formKey]);
+
+  const formError = state?.error ?? inlineError;
 
   const vehiculos = useMemo(() => {
     const cliente = clientes.find((c) => c.id === clienteId);
@@ -68,6 +116,14 @@ export function NuevoTurnoForm({
   function handleClienteChange(id: string) {
     setClienteId(id);
     setVehiculoId("");
+    setInlineError(undefined);
+  }
+
+  function toggleServicio(id: string, checked: boolean) {
+    setServicioIds((prev) =>
+      checked ? [...prev, id] : prev.filter((value) => value !== id)
+    );
+    setInlineError(undefined);
   }
 
   async function handleInlineCliente(e: React.FormEvent<HTMLFormElement>) {
@@ -77,13 +133,13 @@ export function NuevoTurnoForm({
     const result = await createClienteInlineAction(fd);
     setClientePending(false);
     if ("error" in result) {
-      setFormError(result.error);
+      setInlineError(result.error);
       return;
     }
     setClientes((prev) => [...prev, result.cliente]);
     setClienteId(result.cliente.id);
     setShowClienteModal(false);
-    setFormError(undefined);
+    setInlineError(undefined);
   }
 
   async function handleInlineVehiculo(e: React.FormEvent<HTMLFormElement>) {
@@ -95,7 +151,7 @@ export function NuevoTurnoForm({
     const result = await createVehiculoInlineAction(fd);
     setVehiculoPending(false);
     if ("error" in result) {
-      setFormError(result.error);
+      setInlineError(result.error);
       return;
     }
     setClientes((prev) =>
@@ -116,32 +172,30 @@ export function NuevoTurnoForm({
     );
     setVehiculoId(result.vehiculo.id);
     setShowVehiculoModal(false);
+    setInlineError(undefined);
   }
 
   return (
     <>
       <form
-        action={createTurnoAction}
+        action={formAction}
         className="mt-6 max-w-2xl space-y-4"
         onSubmit={(e) => {
-          const form = e.currentTarget;
-          const checked = form.querySelectorAll<HTMLInputElement>(
-            'input[name="servicioIds"]:checked'
-          );
-          if (checked.length === 0) {
+          if (servicioIds.length === 0) {
             e.preventDefault();
-            setFormError("Seleccioná al menos un servicio");
+            setInlineError("Seleccioná al menos un servicio");
             return;
           }
-          const inicioHidden = form.querySelector<HTMLInputElement>('input[name="inicio"]');
-          if (inicioHidden) {
-            inicioHidden.value = `${fecha}T${hora}:00`;
-          }
+          setInlineError(undefined);
         }}
       >
         <FormError message={formError} />
         <input type="hidden" name="tallerId" value={tallerId} />
         <input type="hidden" name="inicio" value={`${fecha}T${hora}:00`} />
+        {servicioIds.map((id) => (
+          <input key={id} type="hidden" name="servicioIds" value={id} />
+        ))}
+        {confirmar ? <input type="hidden" name="confirmar" value="true" /> : null}
 
         <div className="flex items-end gap-2">
           <label className="block flex-1 text-sm">
@@ -177,7 +231,10 @@ export function NuevoTurnoForm({
               name="vehiculoId"
               required
               value={vehiculoId}
-              onChange={(e) => setVehiculoId(e.target.value)}
+              onChange={(e) => {
+                setVehiculoId(e.target.value);
+                setInlineError(undefined);
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
               disabled={!clienteId}
             >
@@ -207,7 +264,11 @@ export function NuevoTurnoForm({
           <div className="space-y-2 rounded-lg border border-slate-200 p-3">
             {servicios.map((s) => (
               <label key={s.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="servicioIds" value={s.id} />
+                <input
+                  type="checkbox"
+                  checked={servicioIds.includes(s.id)}
+                  onChange={(e) => toggleServicio(s.id, e.target.checked)}
+                />
                 <span>
                   {s.nombre} ({s.duracionMin} min) ·{" "}
                   {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
@@ -221,7 +282,8 @@ export function NuevoTurnoForm({
           <span className="mb-1 block font-medium">Bahía</span>
           <select
             name="bahiaId"
-            defaultValue={defaultBahiaId ?? ""}
+            value={bahiaId}
+            onChange={(e) => setBahiaId(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
           >
             <option value="">Automático</option>
@@ -260,6 +322,8 @@ export function NuevoTurnoForm({
               name="kilometraje"
               type="number"
               min={0}
+              value={kilometraje}
+              onChange={(e) => setKilometraje(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
             />
           </label>
@@ -267,19 +331,30 @@ export function NuevoTurnoForm({
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Notas</span>
-          <textarea name="notas" rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+          <textarea
+            name="notas"
+            rows={3}
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
         </label>
 
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="confirmar" value="true" />
+          <input
+            type="checkbox"
+            checked={confirmar}
+            onChange={(e) => setConfirmar(e.target.checked)}
+          />
           Confirmar inmediatamente
         </label>
 
         <button
           type="submit"
+          disabled={pending}
           className="btn-primary-lg"
         >
-          Crear turno
+          {pending ? "Creando..." : "Crear turno"}
         </button>
       </form>
 

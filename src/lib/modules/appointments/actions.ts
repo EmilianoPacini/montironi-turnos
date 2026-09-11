@@ -22,6 +22,90 @@ import { upsertIntervaloKm } from "@/lib/modules/catalog/intervalo.service";
 import { createBahia, updateBahia } from "@/lib/modules/catalog/bahia.service";
 import { assertAdminRole } from "@/lib/auth/guards";
 import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
+import {
+  formActionError,
+  readBoolean,
+  readOptionalString,
+  readString,
+  readStringArray,
+  type FormActionState,
+} from "@/lib/form-action-state";
+
+export type ClienteFormValues = {
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  documento: string;
+  patente: string;
+  email: string;
+  notas: string;
+};
+
+export type ClienteFormState = FormActionState<ClienteFormValues>;
+
+export type VehiculoFormValues = {
+  patente: string;
+  marca: string;
+  modelo: string;
+  tipoVehiculo: TipoVehiculo;
+  condicion: CondicionVehiculo;
+  kilometrajeActual: string;
+  anio: string;
+  color: string;
+};
+
+export type VehiculoFormState = FormActionState<VehiculoFormValues>;
+
+export type TurnoFormValues = {
+  clienteId: string;
+  vehiculoId: string;
+  servicioIds: string[];
+  bahiaId: string;
+  inicio: string;
+  kilometraje: string;
+  notas: string;
+  confirmar: boolean;
+};
+
+export type TurnoFormState = FormActionState<TurnoFormValues>;
+
+function extractClienteFormValues(formData: FormData): ClienteFormValues {
+  return {
+    nombre: readString(formData, "nombre"),
+    apellido: readString(formData, "apellido"),
+    telefono: readString(formData, "telefono"),
+    documento: readString(formData, "documento"),
+    patente: readString(formData, "patente"),
+    email: readString(formData, "email"),
+    notas: readString(formData, "notas"),
+  };
+}
+
+function extractVehiculoFormValues(formData: FormData): VehiculoFormValues {
+  return {
+    patente: readString(formData, "patente"),
+    marca: readString(formData, "marca"),
+    modelo: readString(formData, "modelo"),
+    tipoVehiculo: (readString(formData, "tipoVehiculo") || "auto") as TipoVehiculo,
+    condicion: (readString(formData, "condicion") || "normal") as CondicionVehiculo,
+    kilometrajeActual: readString(formData, "kilometrajeActual"),
+    anio: readString(formData, "anio"),
+    color: readString(formData, "color"),
+  };
+}
+
+function extractTurnoFormValues(formData: FormData): TurnoFormValues {
+  return {
+    clienteId: readString(formData, "clienteId"),
+    vehiculoId: readString(formData, "vehiculoId"),
+    servicioIds: readStringArray(formData, "servicioIds"),
+    bahiaId: readString(formData, "bahiaId"),
+    inicio: readString(formData, "inicio"),
+    kilometraje: readString(formData, "kilometraje"),
+    notas: readString(formData, "notas"),
+    confirmar: readBoolean(formData, "confirmar"),
+  };
+}
 
 function redirectWithError(path: string, message: string): never {
   const sep = path.includes("?") ? "&" : "?";
@@ -36,49 +120,48 @@ function handleFormError(e: unknown, returnPath: string): never {
   throw e;
 }
 
-function mapClienteError(e: unknown, returnPath: string): never {
-  if (e instanceof ClienteValidationError) {
-    redirectWithError(returnPath, e.message);
-  }
-  handleFormError(e, returnPath);
-}
-
-export async function createTurnoAction(formData: FormData): Promise<void> {
+export async function createTurnoAction(
+  _prev: TurnoFormState | undefined,
+  formData: FormData
+): Promise<TurnoFormState | undefined> {
   const tallerId = String(formData.get("tallerId"));
-  const returnPath = `/turnos/nuevo?tallerId=${tallerId}`;
+  const values = extractTurnoFormValues(formData);
 
   try {
     const session = await requireSession();
-    const servicioIds = formData.getAll("servicioIds").map(String);
+    const servicioIds = values.servicioIds;
 
     if (servicioIds.length === 0) {
-      redirectWithError(returnPath, "Seleccioná al menos un servicio");
+      return formActionError("Seleccioná al menos un servicio", values);
     }
 
-    const inicioStr = String(formData.get("inicio"));
-    const kmRaw = String(formData.get("kilometraje") ?? "").trim();
-    const inicio = new Date(inicioStr);
+    const kmRaw = values.kilometraje;
+    const inicio = new Date(values.inicio);
 
     assertNotPastInicio(inicio);
 
     await createTurno({
       empresaId: session.empresaId,
       tallerId,
-      bahiaId: String(formData.get("bahiaId") ?? "") || undefined,
-      clienteId: String(formData.get("clienteId")),
-      vehiculoId: String(formData.get("vehiculoId")),
+      bahiaId: values.bahiaId || undefined,
+      clienteId: values.clienteId,
+      vehiculoId: values.vehiculoId,
       servicioIds,
       inicio,
       kilometraje: kmRaw ? Number(kmRaw) : undefined,
-      notas: String(formData.get("notas") ?? "") || undefined,
+      notas: readOptionalString(formData, "notas"),
       creadorId: session.userId,
-      confirmar: formData.get("confirmar") === "true",
+      confirmar: values.confirmar,
     });
 
     revalidatePath("/agenda");
     redirect("/agenda");
   } catch (e) {
-    handleFormError(e, returnPath);
+    if (isDomainError(e)) {
+      return formActionError(e.message, values);
+    }
+    if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
+    throw e;
   }
 }
 
@@ -204,27 +287,25 @@ export async function removeBlockAction(blockId: string) {
   }
 }
 
-export async function saveClienteAction(formData: FormData): Promise<void> {
+export async function saveClienteAction(
+  _prev: ClienteFormState | undefined,
+  formData: FormData
+): Promise<ClienteFormState | undefined> {
   const id = String(formData.get("id") ?? "") || undefined;
-  const returnPath = id ? `/clientes/${id}/editar` : "/clientes/nuevo";
+  const values = extractClienteFormValues(formData);
 
   try {
     const session = await requireSession();
-
-    const nombre = String(formData.get("nombre") ?? "").trim();
-    const apellido = String(formData.get("apellido") ?? "").trim();
-    const telefono = String(formData.get("telefono") ?? "").trim();
-    const documento = String(formData.get("documento") ?? "").trim();
-    const patente = String(formData.get("patente") ?? "").trim();
+    const { nombre, apellido, telefono, documento, patente, email, notas } = values;
 
     if (!nombre) {
-      redirectWithError(returnPath, "El nombre es obligatorio");
+      return formActionError("El nombre es obligatorio", values);
     }
     if (!id) {
-      if (!apellido) redirectWithError(returnPath, "El apellido es obligatorio");
-      if (!telefono) redirectWithError(returnPath, "El teléfono es obligatorio");
-      if (!documento) redirectWithError(returnPath, "El documento es obligatorio");
-      if (!patente) redirectWithError(returnPath, "La patente es obligatoria");
+      if (!apellido) return formActionError("El apellido es obligatorio", values);
+      if (!telefono) return formActionError("El teléfono es obligatorio", values);
+      if (!documento) return formActionError("El documento es obligatorio", values);
+      if (!patente) return formActionError("La patente es obligatoria", values);
     }
 
     const cliente = await upsertCliente({
@@ -232,10 +313,10 @@ export async function saveClienteAction(formData: FormData): Promise<void> {
       empresaId: session.empresaId,
       nombre,
       apellido: apellido || undefined,
-      email: String(formData.get("email") ?? "") || undefined,
+      email: email || undefined,
       telefono: telefono || undefined,
       documento: documento || undefined,
-      notas: String(formData.get("notas") ?? "") || undefined,
+      notas: notas || undefined,
     });
 
     if (!id && patente) {
@@ -249,7 +330,14 @@ export async function saveClienteAction(formData: FormData): Promise<void> {
     revalidatePath("/clientes");
     redirect("/clientes");
   } catch (e) {
-    mapClienteError(e, returnPath);
+    if (e instanceof ClienteValidationError) {
+      return formActionError(e.message, values);
+    }
+    if (isDomainError(e)) {
+      return formActionError(e.message, values);
+    }
+    if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
+    throw e;
   }
 }
 
@@ -301,28 +389,26 @@ export async function createVehiculoInlineAction(formData: FormData) {
   }
 }
 
-export async function saveVehiculoAction(formData: FormData): Promise<void> {
+export async function saveVehiculoAction(
+  _prev: VehiculoFormState | undefined,
+  formData: FormData
+): Promise<VehiculoFormState | undefined> {
   const clienteId = String(formData.get("clienteId") ?? "") || undefined;
-  const vehiculoId = String(formData.get("vehiculoId") ?? "").trim();
-  const returnPath = clienteId
-    ? vehiculoId
-      ? `/clientes/${clienteId}/vehiculo/${vehiculoId}/editar`
-      : `/clientes/${clienteId}/vehiculo/nuevo`
-    : "/clientes";
+  const values = extractVehiculoFormValues(formData);
 
   try {
     const session = await requireSession();
     await upsertVehiculo({
       empresaId: session.empresaId,
-      patente: String(formData.get("patente")),
-      marca: String(formData.get("marca") ?? "") || undefined,
-      modelo: String(formData.get("modelo") ?? "") || undefined,
-      anio: formData.get("anio") ? Number(formData.get("anio")) : undefined,
-      color: String(formData.get("color") ?? "") || undefined,
-      tipoVehiculo: String(formData.get("tipoVehiculo") ?? "auto") as TipoVehiculo,
-      condicion: String(formData.get("condicion") ?? "normal") as CondicionVehiculo,
-      kilometrajeActual: formData.get("kilometrajeActual")
-        ? Number(formData.get("kilometrajeActual"))
+      patente: values.patente,
+      marca: values.marca || undefined,
+      modelo: values.modelo || undefined,
+      anio: values.anio ? Number(values.anio) : undefined,
+      color: values.color || undefined,
+      tipoVehiculo: values.tipoVehiculo,
+      condicion: values.condicion,
+      kilometrajeActual: values.kilometrajeActual
+        ? Number(values.kilometrajeActual)
         : undefined,
       clienteId,
     });
@@ -330,7 +416,14 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
     if (clienteId) redirect(`/clientes/${clienteId}#vehiculos`);
     redirect("/clientes");
   } catch (e) {
-    handleFormError(e, returnPath);
+    if (e instanceof ClienteValidationError) {
+      return formActionError(e.message, values);
+    }
+    if (isDomainError(e)) {
+      return formActionError(e.message, values);
+    }
+    if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
+    throw e;
   }
 }
 

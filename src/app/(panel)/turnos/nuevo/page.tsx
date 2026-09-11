@@ -29,7 +29,6 @@ export default async function NuevoTurnoPage({
   const servicios = await serviciosForTaller(tallerId, session.empresaId);
   const bahiaId = typeof params.bahiaId === "string" ? params.bahiaId : undefined;
   const inicioParam = typeof params.inicio === "string" ? params.inicio : undefined;
-  const error = typeof params.error === "string" ? params.error : undefined;
   const date = inicioParam ? startOfDay(parseISO(inicioParam)) : startOfDay(new Date());
 
   const compatibleBahias = await getCompatibleBahias(
@@ -62,7 +61,6 @@ export default async function NuevoTurnoPage({
         compatibleBahias={compatibleBahias}
         defaultBahiaId={bahiaId}
         defaultInicio={inicioParam}
-        error={error}
       />
 
       <AvailabilitySlotsPanel

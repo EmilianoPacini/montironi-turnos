@@ -1,8 +1,15 @@
+"use client";
+
+import { useActionState } from "react";
 import { VehiculoFields } from "@/components/clientes/VehiculoFields";
-import type { Vehiculo } from "@prisma/client";
+import { FormError } from "@/components/ui/FormError";
+import {
+  saveVehiculoAction,
+  type VehiculoFormState,
+} from "@/lib/modules/appointments/actions";
+import type { CondicionVehiculo, TipoVehiculo, Vehiculo } from "@prisma/client";
 
 type VehiculoFormProps = {
-  action: (formData: FormData) => void | Promise<void>;
   clienteId: string;
   vehiculo?: Pick<
     Vehiculo,
@@ -20,28 +27,50 @@ type VehiculoFormProps = {
 };
 
 export function VehiculoForm({
-  action,
   clienteId,
   vehiculo,
   submitLabel = "Guardar vehículo",
   cancelHref,
 }: VehiculoFormProps) {
+  const [state, formAction, pending] = useActionState(
+    saveVehiculoAction,
+    undefined as VehiculoFormState | undefined
+  );
+  const values = state?.values;
+  const formKey = state?.formKey ?? "initial";
+
+  const fieldValues = {
+    patente: values?.patente ?? vehiculo?.patente ?? "",
+    marca: values?.marca ?? vehiculo?.marca ?? "",
+    modelo: values?.modelo ?? vehiculo?.modelo ?? "",
+    tipoVehiculo: (values?.tipoVehiculo ?? vehiculo?.tipoVehiculo ?? "auto") as TipoVehiculo,
+    condicion: (values?.condicion ?? vehiculo?.condicion ?? "normal") as CondicionVehiculo,
+    kilometrajeActual:
+      values?.kilometrajeActual ??
+      (vehiculo?.kilometrajeActual != null ? String(vehiculo.kilometrajeActual) : ""),
+    anio: values?.anio ?? (vehiculo?.anio != null ? String(vehiculo.anio) : ""),
+    color: values?.color ?? vehiculo?.color ?? "",
+  };
+
   return (
-    <form action={action} className="panel-card max-w-xl space-y-4 p-6">
+    <form
+      key={formKey}
+      action={formAction}
+      className="panel-card max-w-xl space-y-4 p-6"
+    >
+      <FormError message={state?.error} />
       <input type="hidden" name="clienteId" value={clienteId} />
       <VehiculoFields
-        defaultValues={
-          vehiculo
-            ? {
-                patente: vehiculo.patente,
-                marca: vehiculo.marca ?? "",
-                modelo: vehiculo.modelo ?? "",
-                tipoVehiculo: vehiculo.tipoVehiculo,
-                condicion: vehiculo.condicion,
-                kilometrajeActual: vehiculo.kilometrajeActual,
-              }
-            : undefined
-        }
+        defaultValues={{
+          patente: fieldValues.patente,
+          marca: fieldValues.marca,
+          modelo: fieldValues.modelo,
+          tipoVehiculo: fieldValues.tipoVehiculo,
+          condicion: fieldValues.condicion,
+          kilometrajeActual: fieldValues.kilometrajeActual
+            ? Number(fieldValues.kilometrajeActual)
+            : undefined,
+        }}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
@@ -51,7 +80,7 @@ export function VehiculoForm({
             type="number"
             min={1900}
             max={2100}
-            defaultValue={vehiculo?.anio ?? undefined}
+            defaultValue={fieldValues.anio || undefined}
             className="input-field"
           />
         </label>
@@ -59,14 +88,14 @@ export function VehiculoForm({
           <span className="mb-1 block font-medium text-slate-700">Color</span>
           <input
             name="color"
-            defaultValue={vehiculo?.color ?? ""}
+            defaultValue={fieldValues.color}
             className="input-field"
           />
         </label>
       </div>
       <div className="flex flex-wrap gap-3 pt-2">
-        <button type="submit" className="btn-primary-lg">
-          {submitLabel}
+        <button type="submit" disabled={pending} className="btn-primary-lg">
+          {pending ? "Guardando..." : submitLabel}
         </button>
         {cancelHref ? (
           <a
