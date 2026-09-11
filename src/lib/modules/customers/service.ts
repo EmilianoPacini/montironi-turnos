@@ -6,6 +6,7 @@ import {
   ClienteValidationError,
   normalizeTelefonoE164,
 } from "@/lib/modules/customers/validation";
+import { waIdToE164 } from "@/lib/modules/wah/phone";
 import { DomainError } from "@/lib/modules/appointments/errors";
 
 export { ClienteValidationError };
@@ -66,12 +67,21 @@ export async function getClienteByTelefono(telefono: string, empresaId: string) 
 }
 
 /** Contexto completo para agentes IA — id, teléfono, vehículos, turnos, km, próximos servicios. */
-export async function getClienteContext(params: { empresaId: string; id?: string; telefono?: string }) {
+export async function getClienteContext(params: { empresaId: string; id?: string; telefono?: string; waId?: string }) {
   let cliente;
+  let lookup: "cliente_id" | "telefono" | "wa_id" = "telefono";
   if (params.id) {
+    lookup = "cliente_id";
     cliente = await getCliente(params.id, params.empresaId);
-  } else if (params.telefono) {
-    const row = await getClienteByTelefono(params.telefono, params.empresaId);
+  } else {
+    const telefono = params.telefono
+      ? normalizeTelefonoE164(params.telefono)
+      : params.waId
+        ? waIdToE164(params.waId)
+        : null;
+    if (!telefono) return null;
+    lookup = params.waId && !params.telefono ? "wa_id" : "telefono";
+    const row = await getClienteByTelefono(telefono, params.empresaId);
     if (row) cliente = await getCliente(row.id, params.empresaId);
   }
 
@@ -130,6 +140,22 @@ export async function getClienteContext(params: { empresaId: string; id?: string
     },
   });
 
+  const mappedTurnos = turnos.map((t) => ({
+    id: t.id,
+    estado: t.estado,
+    inicio: t.inicio,
+    finalizaEn: t.finalizaEn,
+    kilometraje: t.kilometraje,
+    patente: t.vehiculo.patente,
+    servicios: t.detalles.map((d) => d.nombreSnapshot),
+    bahia: t.bahia?.nombre ?? null,
+  }));
+
+  const programados = mappedTurnos.filter(
+    (t) => !["finalizado", "cancelado", "vencido", "ausente"].includes(t.estado)
+  );
+  const realizados = mappedTurnos.filter((t) => t.estado === "finalizado");
+
   return {
     id: cliente.id,
     nombre: cliente.nombre,
@@ -138,16 +164,26 @@ export async function getClienteContext(params: { empresaId: string; id?: string
     email: cliente.email,
     documento: cliente.documento,
     vehiculos,
-    turnos: turnos.map((t) => ({
-      id: t.id,
-      estado: t.estado,
-      inicio: t.inicio,
-      finalizaEn: t.finalizaEn,
-      kilometraje: t.kilometraje,
-      patente: t.vehiculo.patente,
-      servicios: t.detalles.map((d) => d.nombreSnapshot),
-      bahia: t.bahia.nombre,
-    })),
+    turnos: mappedTurnos,
+    _context: {
+      cliente: {
+        id: cliente.id,
+        nombre: cliente.nombre,
+        apellido: cliente.apellido,
+        telefono: cliente.telefono,
+        email: cliente.email,
+        documento: cliente.documento,
+      },
+      vehiculos,
+      turnos: { programados, realizados },
+      buyer_profile: null,
+      historial_services: null,
+      meta: {
+        partial: true,
+        missing: ["buyer_profile", "historial_services"],
+        lookup,
+      },
+    },
   };
 }
 
