@@ -29,7 +29,7 @@
 | #11 | `cursor/extract-agenda-filters-c33d` | `AgendaFilters` + constants-driven labels |
 | #12 | `cursor/extract-availability-slots-c33d` | `AvailabilitySlotsPanel` |
 | #13 | `cursor/extract-cliente-core-fields-c33d` | `ClienteCoreFields` |
-| #14 | `cursor/move-proximos-km-service-c33d` | `getProximosKmForTurno` service helper |
+| #15 | `cursor/move-proximos-km-service-c33d` | `getProximosKmForTurno` service helper |
 
 ## QA smoke checklist
 
