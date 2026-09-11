@@ -32,6 +32,24 @@ Requisitos PASS:
 3. `wah_media.message_id` NOT NULL ON DELETE CASCADE
 4. `wah_messages` **sin** `media_id`
 
+## QA — verificación fresh DB
+
+```bash
+npx prisma migrate reset --force   # 3 migraciones + seed
+npm test
+bash scripts/validate-migration-line.sh
+bash scripts/validate-wah-schema.sh
+```
+
+Resultado esperado en branch limpio:
+
+| Gate | Esperado |
+|------|----------|
+| `_prisma_migrations` | exactamente 3 filas (152→170→182) |
+| WAH migrations | 1 sola (`182000`) — sin 71000/80000/81000 |
+| Seed | verde (`condicion` en `servicio_intervalo_km`) |
+| Tests | 58/58 |
+
 ## DBs sucias (columna condicion)
 
-Si una DB legacy tiene `condicion_vehiculo` en lugar de `condicion`, aplicar `006_fix_intervalo_condicion.sql` desde el shared box (md5 `a06011fe8277a55c99f95c4ff8231799`).
+Si una DB legacy tiene `condicion_vehiculo` en lugar de `condicion`, aplicar `006_fix_intervalo_condicion.sql` desde el shared box (md5 `a06011fe8277a55c99f95c4ff8231799`). **No incluido en repo hasta republish Datos.**
