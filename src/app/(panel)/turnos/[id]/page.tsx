@@ -7,12 +7,12 @@ import { getTurnoById, expirePendingTurnos } from "@/lib/modules/appointments/se
 import { EstadoChip } from "@/components/turnos/EstadoChip";
 import {
   VALID_TRANSITIONS,
-  ORIGEN_LABELS,
+  CANAL_LABELS,
   canTransition,
   formatPrecioSnapshot,
 } from "@/lib/modules/appointments/constants";
 import { TurnoActions } from "@/components/turnos/TurnoActions";
-import { EstadoTurno } from "@prisma/client";
+import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function TurnoDetailPage({
   params,
@@ -44,7 +44,7 @@ export default async function TurnoDetailPage({
           </div>
           <p className="mt-1 text-sm text-slate-600">
             {format(turno.inicio, "EEEE d MMMM yyyy", { locale: es })} ·{" "}
-            {format(turno.inicio, "HH:mm")} – {format(turno.fin, "HH:mm")}
+            {format(turno.inicio, "HH:mm")} – {format(turno.finalizaEn, "HH:mm")}
           </p>
         </div>
         <TurnoActions
@@ -80,11 +80,12 @@ export default async function TurnoDetailPage({
               <dd>{turno.bahia.nombre} · {turno.taller.nombre}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Origen</dt>
+              <dt className="text-slate-500">Canal</dt>
               <dd>
-                {ORIGEN_LABELS[turno.origen]}
-                {turno.creador ? ` · ${turno.creador.nombre}` : ""}
-                {turno.agenteIa ? ` · ${turno.agenteIa.nombre}` : ""}
+                {CANAL_LABELS[turno.canal]}
+                {turno.creador && turno.canal === CanalTurno.interno
+                  ? ` · ${turno.creador.nombre}`
+                  : ""}
               </dd>
             </div>
           </dl>

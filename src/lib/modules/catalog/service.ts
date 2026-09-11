@@ -49,11 +49,11 @@ export async function getConfiguracionTaller(tallerId: string) {
   return prisma.configuracionTurnos.findUnique({ where: { tallerId } });
 }
 
-export async function updateConfiguracionTaller(tallerId: string, margenMin: number) {
+export async function updateConfiguracionTaller(tallerId: string, margenMinutos: number) {
   return prisma.configuracionTurnos.upsert({
     where: { tallerId },
-    create: { tallerId, margenMin },
-    update: { margenMin },
+    create: { tallerId, margenMinutos },
+    update: { margenMinutos },
   });
 }
 

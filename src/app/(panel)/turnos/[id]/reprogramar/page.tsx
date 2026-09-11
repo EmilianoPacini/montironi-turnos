@@ -38,7 +38,7 @@ export default async function ReprogramarPage({
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Reprogramar turno</h1>
       <p className="mt-1 text-sm text-slate-600">
         Horario actual: {format(turno.inicio, "dd/MM/yyyy HH:mm")} –{" "}
-        {format(turno.fin, "HH:mm")} · {turno.bahia.nombre}
+        {format(turno.finalizaEn, "HH:mm")} · {turno.bahia.nombre}
       </p>
       <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
         Si hay conflicto, se mantiene el horario anterior.

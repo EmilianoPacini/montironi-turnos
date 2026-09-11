@@ -38,7 +38,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     tallerId = taller.id;
 
     await prisma.configuracionTurnos.create({
-      data: { tallerId, margenMin: 15 },
+      data: { tallerId, margenMinutos: 15 },
     });
 
     const bahia = await prisma.bahia.create({

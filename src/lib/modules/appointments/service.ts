@@ -1,4 +1,4 @@
-import { Prisma, EstadoTurno, OrigenTurno, TipoOcupacion } from "@prisma/client";
+import { Prisma, EstadoTurno, CanalTurno, TipoOcupacion } from "@prisma/client";
 import prisma from "@/lib/db";
 import {
   calcularDuracionTotal,
@@ -26,10 +26,9 @@ export interface CreateTurnoInput {
   vehiculoId: string;
   servicioIds: string[];
   inicio: Date;
-  origen?: OrigenTurno;
+  canal?: CanalTurno;
   notas?: string;
   creadorId?: string;
-  agenteIaId?: string;
   confirmar?: boolean;
 }
 
@@ -135,13 +134,13 @@ export async function createTurno(input: CreateTurnoInput) {
     throw new AppointmentError("Servicios inválidos", "INVALID_SERVICES");
   }
 
-  const fin = new Date(input.inicio.getTime() + duracionMin * 60_000);
+  const finalizaEn = new Date(input.inicio.getTime() + duracionMin * 60_000);
 
   const { bahiaId } = await resolveBahiaAssignment({
     tallerId: input.tallerId,
     servicioIds: input.servicioIds,
     inicio: input.inicio,
-    fin,
+    fin: finalizaEn,
     bahiaId: input.bahiaId,
   });
 
@@ -157,11 +156,10 @@ export async function createTurno(input: CreateTurnoInput) {
           clienteId: input.clienteId,
           vehiculoId: input.vehiculoId,
           creadorId: input.creadorId,
-          agenteIaId: input.agenteIaId,
-          origen: input.origen ?? OrigenTurno.panel,
+          canal: input.canal ?? CanalTurno.interno,
           estado,
           inicio: input.inicio,
-          fin,
+          finalizaEn,
           notas: input.notas,
           detalles: {
             create: servicios.map((s, i) => ({
@@ -177,7 +175,6 @@ export async function createTurno(input: CreateTurnoInput) {
             create: {
               estadoNuevo: estado,
               usuarioId: input.creadorId,
-              agenteIaId: input.agenteIaId,
               detalle: "Turno creado",
             },
           },
@@ -196,7 +193,7 @@ export async function createTurno(input: CreateTurnoInput) {
           turnoId: turno.id,
           tipo: TipoOcupacion.turno,
           inicio: input.inicio,
-          fin,
+          fin: finalizaEn,
           activo: true,
         },
       });
@@ -238,7 +235,7 @@ export async function confirmTurno(params: {
   const available = await checkSlotAvailable(
     turno.bahiaId,
     turno.inicio,
-    turno.fin,
+    turno.finalizaEn,
     turno.id
   );
   if (!available) {
@@ -260,7 +257,6 @@ export async function rescheduleTurno(params: {
   inicio: Date;
   version: number;
   usuarioId?: string;
-  agenteIaId?: string;
 }) {
   const turno = await prisma.turno.findFirst({
     where: { id: params.turnoId, empresaId: params.empresaId },
@@ -278,7 +274,7 @@ export async function rescheduleTurno(params: {
   const margen = await getMargenMin(turno.tallerId);
   const servicioIds = turno.detalles.map((d) => d.servicioId);
   const duracionMin = turno.detalles.reduce((a, d) => a + d.duracionMin, 0) + margen;
-  const fin = new Date(params.inicio.getTime() + duracionMin * 60_000);
+  const finalizaEn = new Date(params.inicio.getTime() + duracionMin * 60_000);
 
   let resolvedBahiaId: string;
   try {
@@ -286,7 +282,7 @@ export async function rescheduleTurno(params: {
       tallerId: turno.tallerId,
       servicioIds,
       inicio: params.inicio,
-      fin,
+      fin: finalizaEn,
       bahiaId: params.bahiaId,
       excludeTurnoId: turno.id,
     }));
@@ -313,7 +309,7 @@ export async function rescheduleTurno(params: {
           turnoId: turno.id,
           tipo: TipoOcupacion.turno,
           inicio: params.inicio,
-          fin,
+          fin: finalizaEn,
           activo: true,
         },
       });
@@ -323,14 +319,13 @@ export async function rescheduleTurno(params: {
         data: {
           bahiaId: resolvedBahiaId,
           inicio: params.inicio,
-          fin,
+          finalizaEn,
           version: { increment: 1 },
           eventos: {
             create: {
               estadoPrev: turno.estado,
               estadoNuevo: turno.estado,
               usuarioId: params.usuarioId,
-              agenteIaId: params.agenteIaId,
               detalle: "Turno reprogramado",
             },
           },
@@ -364,7 +359,6 @@ export async function cancelTurno(params: {
   empresaId: string;
   version?: number;
   usuarioId?: string;
-  agenteIaId?: string;
   motivo?: string;
 }) {
   const turno = await prisma.turno.findFirst({
@@ -389,7 +383,6 @@ export async function cancelTurno(params: {
       turno,
       nuevoEstado: EstadoTurno.cancelado,
       usuarioId: params.usuarioId,
-      agenteIaId: params.agenteIaId,
       detalle: params.motivo ?? "Turno cancelado",
       tx,
     });
@@ -441,7 +434,6 @@ async function transitionTurno(params: {
   turno: { id: string; estado: EstadoTurno; version: number };
   nuevoEstado: EstadoTurno;
   usuarioId?: string;
-  agenteIaId?: string;
   detalle?: string;
   tx?: Prisma.TransactionClient;
 }) {
@@ -457,7 +449,6 @@ async function transitionTurno(params: {
           estadoPrev: params.turno.estado,
           estadoNuevo: params.nuevoEstado,
           usuarioId: params.usuarioId,
-          agenteIaId: params.agenteIaId,
           detalle: params.detalle,
         },
       },
@@ -523,10 +514,9 @@ export async function getTurnoById(turnoId: string, empresaId: string) {
       bahia: true,
       taller: true,
       creador: true,
-      agenteIa: true,
       eventos: {
         orderBy: { createdAt: "desc" },
-        include: { usuario: true, agenteIa: true },
+        include: { usuario: true },
       },
     },
   });
@@ -536,7 +526,7 @@ export async function listTurnos(params: {
   empresaId: string;
   tallerId?: string;
   estados?: EstadoTurno[];
-  origen?: OrigenTurno;
+  canal?: CanalTurno;
   pendientesOnly?: boolean;
   from?: Date;
   to?: Date;
@@ -547,7 +537,7 @@ export async function listTurnos(params: {
       ...(params.tallerId ? { tallerId: params.tallerId } : {}),
       ...(params.estados?.length ? { estado: { in: params.estados } } : {}),
       ...(params.pendientesOnly ? { estado: EstadoTurno.pendiente } : {}),
-      ...(params.origen ? { origen: params.origen } : {}),
+      ...(params.canal ? { canal: params.canal } : {}),
       ...(params.from || params.to
         ? {
             inicio: {

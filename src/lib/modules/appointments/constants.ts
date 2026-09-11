@@ -14,11 +14,12 @@ export const TURNO_STATE_COLORS: Record<
   vencido: { text: "#5C6872", bg: "#F0F2F4", label: "Vencido" },
 };
 
-export const ORIGEN_LABELS: Record<string, string> = {
-  panel: "Panel",
+export const CANAL_LABELS: Record<string, string> = {
+  web: "Web",
+  telefono: "Teléfono",
   whatsapp: "WhatsApp",
-  voz: "Voz",
-  api: "API",
+  interno: "Panel",
+  agente_ia: "Agente IA",
 };
 
 export const MODO_PRECIO_LABELS: Record<string, string> = {

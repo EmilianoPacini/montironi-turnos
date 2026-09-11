@@ -1,21 +1,20 @@
 import Link from "next/link";
-import { EstadoTurno, OrigenTurno } from "@prisma/client";
+import { CanalTurno, EstadoTurno } from "@prisma/client";
 import { format } from "date-fns";
 import { EstadoChip } from "./EstadoChip";
-import { ORIGEN_LABELS } from "@/lib/modules/appointments/constants";
+import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
 
 interface TurnoCardProps {
   turno: {
     id: string;
     inicio: Date;
-    fin: Date;
+    finalizaEn: Date;
     estado: EstadoTurno;
-    origen: OrigenTurno;
+    canal: CanalTurno;
     cliente: { nombre: string; apellido?: string | null };
     vehiculo: { patente: string };
     detalles: { nombreSnapshot: string }[];
     creador?: { nombre: string } | null;
-    agenteIa?: { nombre: string } | null;
   };
   compact?: boolean;
 }
@@ -23,9 +22,9 @@ interface TurnoCardProps {
 export function TurnoCard({ turno, compact }: TurnoCardProps) {
   const servicio = turno.detalles.map((d) => d.nombreSnapshot).join(", ");
   const actor =
-    turno.origen === "panel"
+    turno.canal === CanalTurno.interno
       ? turno.creador?.nombre ?? "Panel"
-      : turno.agenteIa?.nombre ?? ORIGEN_LABELS[turno.origen];
+      : CANAL_LABELS[turno.canal];
 
   return (
     <Link
@@ -35,7 +34,7 @@ export function TurnoCard({ turno, compact }: TurnoCardProps) {
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-slate-900">
-            {format(turno.inicio, "HH:mm")} – {format(turno.fin, "HH:mm")}
+            {format(turno.inicio, "HH:mm")} – {format(turno.finalizaEn, "HH:mm")}
           </p>
           {!compact && <p className="text-xs text-slate-500">{servicio}</p>}
         </div>
@@ -48,7 +47,7 @@ export function TurnoCard({ turno, compact }: TurnoCardProps) {
         <p className="mt-1 truncate text-xs text-slate-500">{servicio}</p>
       ) : null}
       <p className="mt-1 text-xs text-slate-500">
-        {ORIGEN_LABELS[turno.origen]} · {actor}
+        {CANAL_LABELS[turno.canal]} · {actor}
       </p>
     </Link>
   );

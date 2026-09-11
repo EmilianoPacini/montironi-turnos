@@ -16,15 +16,15 @@ export async function withIdempotency<T>(params: {
 
   const existing = await prisma.operacionApi.findUnique({
     where: {
-      empresaId_claveIdempotencia: {
+      empresaId_idempotencyKey: {
         empresaId: params.empresaId,
-        claveIdempotencia: params.idempotencyKey,
+        idempotencyKey: params.idempotencyKey,
       },
     },
   });
 
   if (existing) {
-    if (existing.huellaSolicitud !== huella) {
+    if (existing.requestFingerprint !== huella) {
       throw new Error("IDEMPOTENCY_KEY_REUSED");
     }
     return existing.respuesta as T;
@@ -35,8 +35,8 @@ export async function withIdempotency<T>(params: {
   await prisma.operacionApi.create({
     data: {
       empresaId: params.empresaId,
-      claveIdempotencia: params.idempotencyKey,
-      huellaSolicitud: huella,
+      idempotencyKey: params.idempotencyKey,
+      requestFingerprint: huella,
       operacion: params.operation,
       respuesta: result as object,
     },

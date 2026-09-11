@@ -9,7 +9,8 @@ import { expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { AgendaGrid } from "@/components/agenda/AgendaGrid";
 import { AgendaToolbar } from "@/components/agenda/AgendaToolbar";
 import { TurnoCard } from "@/components/turnos/TurnoCard";
-import { EstadoTurno, OrigenTurno } from "@prisma/client";
+import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
+import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function AgendaPage({
   searchParams,
@@ -31,8 +32,8 @@ export default async function AgendaPage({
 
   const estadoFilter =
     typeof params.estado === "string" ? (params.estado as EstadoTurno) : undefined;
-  const origenFilter =
-    typeof params.origen === "string" ? (params.origen as OrigenTurno) : undefined;
+  const canalFilter =
+    typeof params.canal === "string" ? (params.canal as CanalTurno) : undefined;
   const pendientes = params.pendientes === "1";
   const vista = typeof params.vista === "string" ? params.vista : "grid";
 
@@ -54,14 +55,14 @@ export default async function AgendaPage({
 
   let turnos = agenda.turnos;
   if (estadoFilter) turnos = turnos.filter((t) => t.estado === estadoFilter);
-  if (origenFilter) turnos = turnos.filter((t) => t.origen === origenFilter);
+  if (canalFilter) turnos = turnos.filter((t) => t.canal === canalFilter);
   if (pendientes) turnos = turnos.filter((t) => t.estado === EstadoTurno.pendiente);
 
   const queryBase = new URLSearchParams();
   queryBase.set("taller", tallerId);
   queryBase.set("fecha", dateStr);
   if (estadoFilter) queryBase.set("estado", estadoFilter);
-  if (origenFilter) queryBase.set("origen", origenFilter);
+  if (canalFilter) queryBase.set("canal", canalFilter);
   if (pendientes) queryBase.set("pendientes", "1");
 
   return (
@@ -118,7 +119,7 @@ export default async function AgendaPage({
         </Link>
       </div>
 
-      <AgendaFilters queryBase={queryBase.toString()} estado={estadoFilter} origen={origenFilter} />
+      <AgendaFilters queryBase={queryBase.toString()} estado={estadoFilter} canal={canalFilter} />
 
       {vista === "lista" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -144,11 +145,11 @@ export default async function AgendaPage({
 function AgendaFilters({
   queryBase,
   estado,
-  origen,
+  canal,
 }: {
   queryBase: string;
   estado?: EstadoTurno;
-  origen?: OrigenTurno;
+  canal?: CanalTurno;
 }) {
   const estados: { value: EstadoTurno; label: string }[] = [
     { value: EstadoTurno.pendiente, label: "Pendiente" },
@@ -156,6 +157,13 @@ function AgendaFilters({
     { value: EstadoTurno.recibido, label: "Recibido" },
     { value: EstadoTurno.en_servicio, label: "En servicio" },
     { value: EstadoTurno.finalizado, label: "Finalizado" },
+  ];
+
+  const canales: CanalTurno[] = [
+    CanalTurno.interno,
+    CanalTurno.whatsapp,
+    CanalTurno.telefono,
+    CanalTurno.agente_ia,
   ];
 
   return (
@@ -181,17 +189,17 @@ function AgendaFilters({
           {e.label}
         </Link>
       ))}
-      {(["panel", "whatsapp", "voz", "api"] as OrigenTurno[]).map((o) => (
+      {canales.map((c) => (
         <Link
-          key={o}
-          href={`/agenda?${queryBase}&origen=${o}`}
+          key={c}
+          href={`/agenda?${queryBase}&canal=${c}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            origen === o
+            canal === c
               ? "bg-indigo-600 text-white"
               : "bg-white text-slate-600 ring-1 ring-slate-200"
           }`}
         >
-          {o}
+          {CANAL_LABELS[c]}
         </Link>
       ))}
     </div>

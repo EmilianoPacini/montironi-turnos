@@ -8,7 +8,7 @@ import { RolUsuario } from "@prisma/client";
 export default async function ServiciosPage() {
   const session = await getAuthSession();
   
-  if (session.rol !== RolUsuario.ADMIN) redirect("/agenda");
+  if (session.rol !== RolUsuario.admin) redirect("/agenda");
 
   const [servicios, tipos] = await Promise.all([
     listServicios(session.empresaId),

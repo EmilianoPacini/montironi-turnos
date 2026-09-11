@@ -1,6 +1,6 @@
-import { PrismaClient, DiaSemana, EstadoTurno, OrigenTurno, RolUsuario, ModoPrecio } from "@prisma/client";
+import { PrismaClient, DiaSemana, EstadoTurno, CanalTurno, RolUsuario, ModoPrecio } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
-import { addHours, addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
+import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 
 const prisma = new PrismaClient();
 
@@ -29,7 +29,6 @@ async function main() {
   await prisma.bahia.deleteMany();
   await prisma.taller.deleteMany();
   await prisma.configuracionTurnos.deleteMany();
-  await prisma.agenteIa.deleteMany();
   await prisma.vehiculo.deleteMany();
   await prisma.cliente.deleteMany();
   await prisma.usuario.deleteMany();
@@ -51,7 +50,7 @@ async function main() {
       email: "admin@montironi.com",
       nombre: "Admin Montironi",
       passwordHash: adminHash,
-      rol: RolUsuario.ADMIN,
+      rol: RolUsuario.admin,
     },
   });
 
@@ -61,12 +60,8 @@ async function main() {
       email: "empleado@montironi.com",
       nombre: "Juan Pérez",
       passwordHash: empleadoHash,
-      rol: RolUsuario.EMPLEADO,
+      rol: RolUsuario.empleado,
     },
-  });
-
-  const agente = await prisma.agenteIa.create({
-    data: { empresaId: empresa.id, nombre: "Agente WhatsApp" },
   });
 
   const tallerCentro = await prisma.taller.create({
@@ -86,10 +81,10 @@ async function main() {
   });
 
   await prisma.configuracionTurnos.create({
-    data: { tallerId: tallerCentro.id, margenMin: 15 },
+    data: { tallerId: tallerCentro.id, margenMinutos: 15 },
   });
   await prisma.configuracionTurnos.create({
-    data: { tallerId: tallerNorte.id, margenMin: 20 },
+    data: { tallerId: tallerNorte.id, margenMinutos: 20 },
   });
 
   const bahiasCentro = await Promise.all(
@@ -236,19 +231,19 @@ async function main() {
   }
 
   const turnoSpecs = [
-    { h: 9, m: 0, estado: EstadoTurno.confirmado, bahia: bahiasCentro[0], cliente: 0, servicios: [0], origen: OrigenTurno.panel },
-    { h: 10, m: 30, estado: EstadoTurno.pendiente, bahia: bahiasCentro[1], cliente: 1, servicios: [1], origen: OrigenTurno.whatsapp },
-    { h: 11, m: 0, estado: EstadoTurno.recibido, bahia: bahiasCentro[0], cliente: 2, servicios: [2], origen: OrigenTurno.panel },
-    { h: 14, m: 0, estado: EstadoTurno.en_servicio, bahia: bahiasCentro[2], cliente: 3, servicios: [0, 3], origen: OrigenTurno.api },
-    { h: 15, m: 30, estado: EstadoTurno.finalizado, bahia: bahiasCentro[1], cliente: 0, servicios: [0], origen: OrigenTurno.panel },
-    { h: 16, m: 0, estado: EstadoTurno.pendiente, bahia: bahiasCentro[2], cliente: 1, servicios: [2], origen: OrigenTurno.voz },
+    { h: 9, m: 0, estado: EstadoTurno.confirmado, bahia: bahiasCentro[0], cliente: 0, servicios: [0], canal: CanalTurno.interno },
+    { h: 10, m: 30, estado: EstadoTurno.pendiente, bahia: bahiasCentro[1], cliente: 1, servicios: [1], canal: CanalTurno.whatsapp },
+    { h: 11, m: 0, estado: EstadoTurno.recibido, bahia: bahiasCentro[0], cliente: 2, servicios: [2], canal: CanalTurno.interno },
+    { h: 14, m: 0, estado: EstadoTurno.en_servicio, bahia: bahiasCentro[2], cliente: 3, servicios: [0, 3], canal: CanalTurno.agente_ia },
+    { h: 15, m: 30, estado: EstadoTurno.finalizado, bahia: bahiasCentro[1], cliente: 0, servicios: [0], canal: CanalTurno.interno },
+    { h: 16, m: 0, estado: EstadoTurno.pendiente, bahia: bahiasCentro[2], cliente: 1, servicios: [2], canal: CanalTurno.telefono },
   ];
 
   for (const spec of turnoSpecs) {
     const inicio = timeOnToday(spec.h, spec.m);
     const selectedServicios = spec.servicios.map((i) => servicios[i]);
     const duracion = selectedServicios.reduce((a, s) => a + s.duracionMin, 0) + 15;
-    const fin = addMinutes(inicio, duracion);
+    const finalizaEn = addMinutes(inicio, duracion);
 
     const turno = await prisma.turno.create({
       data: {
@@ -258,11 +253,10 @@ async function main() {
         clienteId: clientes[spec.cliente].id,
         vehiculoId: vehiculos[spec.cliente].id,
         creadorId: admin.id,
-        agenteIaId: spec.origen !== OrigenTurno.panel ? agente.id : undefined,
         estado: spec.estado,
-        origen: spec.origen,
+        canal: spec.canal,
         inicio,
-        fin,
+        finalizaEn,
         detalles: {
           create: selectedServicios.map((s, i) => ({
             servicioId: s.id,
@@ -289,7 +283,7 @@ async function main() {
         turnoId: turno.id,
         tipo: "turno",
         inicio,
-        fin,
+        fin: finalizaEn,
         activo: true,
       },
     });

@@ -1,4 +1,4 @@
-// Montironi Turnos - schema de postventa
+// Montironi Turnos — authoritative PostgreSQL schema (Prisma mapping)
 
 generator client {
   provider = "prisma-client-js"
@@ -9,11 +9,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Note: exclusion constraint added in migration SQL
-
 enum RolUsuario {
-  ADMIN
-  EMPLEADO
+  admin
+  operador
+  asesor
+  empleado
+
+  @@map("rol_usuario")
 }
 
 enum EstadoTurno {
@@ -25,18 +27,33 @@ enum EstadoTurno {
   cancelado
   ausente
   vencido
+
+  @@map("estado_turno")
 }
 
-enum OrigenTurno {
-  panel
+enum EstadoCalendario {
+  disponible
+  bloqueado
+  cerrado
+
+  @@map("estado_calendario")
+}
+
+enum CanalTurno {
+  web
+  telefono
   whatsapp
-  voz
-  api
+  interno
+  agente_ia
+
+  @@map("canal_turno")
 }
 
 enum TipoOcupacion {
   turno
   bloqueo
+
+  @@map("tipo_ocupacion")
 }
 
 enum DiaSemana {
@@ -47,50 +64,55 @@ enum DiaSemana {
   viernes
   sabado
   domingo
+
+  @@map("dia_semana")
 }
 
 enum TipoExcepcion {
   cerrado
   horario_especial
+
+  @@map("tipo_excepcion")
 }
 
 enum ModoPrecio {
   fijo
   desde
   a_presupuestar
+
+  @@map("modo_precio")
 }
 
 model Empresa {
-  id        String   @id @default(cuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre    String
   slug      String   @unique
   activa    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  usuarios             Usuario[]
-  talleres             Taller[]
-  tiposServicio        TipoServicio[]
-  servicios            Servicio[]
-  clientes             Cliente[]
-  vehiculos            Vehiculo[]
-  turnos               Turno[]
-  agentesIa            AgenteIa[]
-  operacionesApi       OperacionApi[]
+  usuarios       Usuario[]
+  talleres       Taller[]
+  tiposServicio  TipoServicio[]
+  servicios      Servicio[]
+  clientes       Cliente[]
+  vehiculos      Vehiculo[]
+  turnos         Turno[]
+  operacionesApi OperacionApi[]
 
   @@map("empresa")
 }
 
 model Usuario {
-  id           String     @id @default(cuid())
-  empresaId    String     @map("empresa_id")
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId    String     @map("empresa_id") @db.Uuid
   email        String
   nombre       String
   passwordHash String     @map("password_hash")
-  rol          RolUsuario @default(EMPLEADO)
+  rol          RolUsuario @default(empleado)
   activo       Boolean    @default(true)
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa       Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   turnosCreados Turno[]       @relation("TurnoCreador")
@@ -101,49 +123,49 @@ model Usuario {
 }
 
 model Taller {
-  id        String   @id @default(cuid())
-  empresaId String   @map("empresa_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
   nombre    String
   direccion String?
   activo    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  empresa          Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  bahias           Bahia[]
-  tallerServicios  TallerServicio[]
-  patronesHorario  PatronHorario[]
-  excepciones      ExcepcionHorario[]
-  turnos           Turno[]
-  configuracion    ConfiguracionTurnos?
+  empresa         Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  bahias          Bahia[]
+  tallerServicios TallerServicio[]
+  patronesHorario PatronHorario[]
+  excepciones     ExcepcionHorario[]
+  turnos          Turno[]
+  configuracion   ConfiguracionTurnos?
 
   @@map("taller")
 }
 
 model Bahia {
-  id        String   @id @default(cuid())
-  tallerId  String   @map("taller_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId  String   @map("taller_id") @db.Uuid
   nombre    String
   orden     Int      @default(0)
   activa    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  taller          Taller           @relation(fields: [tallerId], references: [id], onDelete: Cascade)
-  bahiaServicios  BahiaServicio[]
-  ocupaciones     OcupacionBahia[]
-  turnos          Turno[]
+  taller         Taller           @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  bahiaServicios BahiaServicio[]
+  ocupaciones    OcupacionBahia[]
+  turnos         Turno[]
 
   @@map("bahia")
 }
 
 model TipoServicio {
-  id        String   @id @default(cuid())
-  empresaId String   @map("empresa_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
   nombre    String
   activo    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   servicios Servicio[]
@@ -152,17 +174,17 @@ model TipoServicio {
 }
 
 model Servicio {
-  id             String   @id @default(cuid())
-  empresaId      String   @map("empresa_id")
-  tipoServicioId String   @map("tipo_servicio_id")
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId      String     @map("empresa_id") @db.Uuid
+  tipoServicioId String     @map("tipo_servicio_id") @db.Uuid
   nombre         String
   descripcion    String?
   duracionMin    Int        @map("duracion_min")
   precio         Decimal    @db.Decimal(10, 2)
   modoPrecio     ModoPrecio @default(fijo) @map("modo_precio")
   activo         Boolean    @default(true)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   tipoServicio    TipoServicio     @relation(fields: [tipoServicioId], references: [id])
@@ -174,9 +196,9 @@ model Servicio {
 }
 
 model TallerServicio {
-  id         String  @id @default(cuid())
-  tallerId   String  @map("taller_id")
-  servicioId String  @map("servicio_id")
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId   String  @map("taller_id") @db.Uuid
+  servicioId String  @map("servicio_id") @db.Uuid
   activo     Boolean @default(true)
 
   taller   Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
@@ -187,9 +209,9 @@ model TallerServicio {
 }
 
 model BahiaServicio {
-  id         String  @id @default(cuid())
-  bahiaId    String  @map("bahia_id")
-  servicioId String  @map("servicio_id")
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bahiaId    String  @map("bahia_id") @db.Uuid
+  servicioId String  @map("servicio_id") @db.Uuid
   activo     Boolean @default(true)
 
   bahia    Bahia    @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
@@ -200,21 +222,21 @@ model BahiaServicio {
 }
 
 model PatronHorario {
-  id       String    @id @default(cuid())
-  tallerId String    @map("taller_id")
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId String    @map("taller_id") @db.Uuid
   dia      DiaSemana
   activo   Boolean   @default(true)
 
-  taller   Taller           @relation(fields: [tallerId], references: [id], onDelete: Cascade)
-  franjas  FranjaHoraria[]
+  taller  Taller            @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  franjas FranjaHoraria[]
 
   @@unique([tallerId, dia])
   @@map("patron_horario")
 }
 
 model FranjaHoraria {
-  id              String @id @default(cuid())
-  patronHorarioId String @map("patron_horario_id")
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patronHorarioId String @map("patron_horario_id") @db.Uuid
   horaInicio      String @map("hora_inicio")
   horaFin         String @map("hora_fin")
 
@@ -224,8 +246,8 @@ model FranjaHoraria {
 }
 
 model ExcepcionHorario {
-  id         String        @id @default(cuid())
-  tallerId   String        @map("taller_id")
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId   String        @map("taller_id") @db.Uuid
   fecha      DateTime      @db.Date
   tipo       TipoExcepcion
   horaInicio String?       @map("hora_inicio")
@@ -239,9 +261,9 @@ model ExcepcionHorario {
 }
 
 model ConfiguracionTurnos {
-  id        String @id @default(cuid())
-  tallerId  String @unique @map("taller_id")
-  margenMin Int    @default(15) @map("margen_min")
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId       String @unique @map("taller_id") @db.Uuid
+  margenMinutos  Int    @default(15) @map("margen_minutos")
 
   taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
 
@@ -249,8 +271,8 @@ model ConfiguracionTurnos {
 }
 
 model Cliente {
-  id        String   @id @default(cuid())
-  empresaId String   @map("empresa_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
   nombre    String
   apellido  String?
   email     String?
@@ -258,10 +280,10 @@ model Cliente {
   documento String?
   notas     String?
   activo    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  empresa    Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa    Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   vehiculos  ClienteVehiculo[]
   documentos DocumentoCliente[]
   turnos     Turno[]
@@ -270,15 +292,15 @@ model Cliente {
 }
 
 model Vehiculo {
-  id        String   @id @default(cuid())
-  empresaId String   @map("empresa_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
   patente   String
   marca     String?
   modelo    String?
   anio      Int?
   color     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa  Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   clientes ClienteVehiculo[]
@@ -289,9 +311,9 @@ model Vehiculo {
 }
 
 model ClienteVehiculo {
-  id        String @id @default(cuid())
-  clienteId String @map("cliente_id")
-  vehiculoId String @map("vehiculo_id")
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId   String  @map("cliente_id") @db.Uuid
+  vehiculoId  String  @map("vehiculo_id") @db.Uuid
   esPrincipal Boolean @default(false) @map("es_principal")
 
   cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -302,12 +324,12 @@ model ClienteVehiculo {
 }
 
 model DocumentoCliente {
-  id        String   @id @default(cuid())
-  clienteId String   @map("cliente_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId String   @map("cliente_id") @db.Uuid
   nombre    String
   url       String?
   tipo      String?
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
@@ -315,22 +337,21 @@ model DocumentoCliente {
 }
 
 model Turno {
-  id          String      @id @default(cuid())
-  empresaId   String      @map("empresa_id")
-  tallerId    String      @map("taller_id")
-  bahiaId     String      @map("bahia_id")
-  clienteId   String      @map("cliente_id")
-  vehiculoId  String      @map("vehiculo_id")
-  creadorId   String?     @map("creador_id")
-  agenteIaId  String?     @map("agente_ia_id")
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String      @map("empresa_id") @db.Uuid
+  tallerId    String      @map("taller_id") @db.Uuid
+  bahiaId     String      @map("bahia_id") @db.Uuid
+  clienteId   String      @map("cliente_id") @db.Uuid
+  vehiculoId  String      @map("vehiculo_id") @db.Uuid
+  creadorId   String?     @map("creador_id") @db.Uuid
   estado      EstadoTurno @default(pendiente)
-  origen      OrigenTurno @default(panel)
-  inicio      DateTime
-  fin         DateTime
+  canal       CanalTurno  @default(interno)
+  inicio      DateTime    @db.Timestamptz(6)
+  finalizaEn  DateTime    @map("finaliza_en") @db.Timestamptz(6)
   notas       String?
   version     Int         @default(1)
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa     Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   taller      Taller           @relation(fields: [tallerId], references: [id])
@@ -338,9 +359,8 @@ model Turno {
   cliente     Cliente          @relation(fields: [clienteId], references: [id])
   vehiculo    Vehiculo         @relation(fields: [vehiculoId], references: [id])
   creador     Usuario?         @relation("TurnoCreador", fields: [creadorId], references: [id])
-  agenteIa    AgenteIa?        @relation(fields: [agenteIaId], references: [id])
   detalles    DetalleTurno[]
-  ocupacion   OcupacionBahia?
+  ocupaciones OcupacionBahia[]
   eventos     EventoTurno[]
 
   @@index([empresaId, inicio])
@@ -349,10 +369,10 @@ model Turno {
 }
 
 model DetalleTurno {
-  id            String  @id @default(cuid())
-  turnoId       String  @map("turno_id")
-  servicioId    String  @map("servicio_id")
-  nombreSnapshot String @map("nombre_snapshot")
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  turnoId            String     @map("turno_id") @db.Uuid
+  servicioId         String     @map("servicio_id") @db.Uuid
+  nombreSnapshot     String     @map("nombre_snapshot")
   duracionMin        Int        @map("duracion_min")
   precioSnapshot     Decimal    @map("precio_snapshot") @db.Decimal(10, 2)
   modoPrecioSnapshot ModoPrecio @default(fijo) @map("modo_precio_snapshot")
@@ -365,65 +385,49 @@ model DetalleTurno {
 }
 
 model OcupacionBahia {
-  id        String        @id @default(cuid())
-  bahiaId   String        @map("bahia_id")
-  turnoId   String?       @unique @map("turno_id")
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bahiaId   String        @map("bahia_id") @db.Uuid
+  turnoId   String?       @map("turno_id") @db.Uuid
   tipo      TipoOcupacion
-  inicio    DateTime
-  fin       DateTime
-  activo    Boolean       @default(true)
   motivo    String?
-  createdAt DateTime      @default(now()) @map("created_at")
+  inicio    DateTime      @db.Timestamptz(6)
+  fin       DateTime      @db.Timestamptz(6)
+  activo    Boolean       @default(true)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
   bahia Bahia  @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
-  turno Turno? @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+  turno Turno? @relation(fields: [turnoId], references: [id], onDelete: Restrict)
 
   @@index([bahiaId, inicio, fin])
   @@map("ocupacion_bahia")
 }
 
 model EventoTurno {
-  id          String       @id @default(cuid())
-  turnoId     String       @map("turno_id")
-  usuarioId   String?      @map("usuario_id")
-  agenteIaId  String?      @map("agente_ia_id")
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  turnoId     String       @map("turno_id") @db.Uuid
+  usuarioId   String?      @map("usuario_id") @db.Uuid
   estadoPrev  EstadoTurno? @map("estado_prev")
   estadoNuevo EstadoTurno  @map("estado_nuevo")
   detalle     String?
-  createdAt   DateTime     @default(now()) @map("created_at")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  turno    Turno     @relation(fields: [turnoId], references: [id], onDelete: Cascade)
-  usuario  Usuario?  @relation(fields: [usuarioId], references: [id])
-  agenteIa AgenteIa? @relation(fields: [agenteIaId], references: [id])
+  turno   Turno    @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
 
   @@map("evento_turno")
 }
 
 model OperacionApi {
-  id                 String   @id @default(cuid())
-  empresaId          String   @map("empresa_id")
-  claveIdempotencia  String   @map("clave_idempotencia")
-  huellaSolicitud    String   @map("huella_solicitud")
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  idempotencyKey     String   @map("idempotency_key")
+  requestFingerprint String   @map("request_fingerprint")
   operacion          String
   respuesta          Json
-  createdAt          DateTime @default(now()) @map("created_at")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  @@unique([empresaId, claveIdempotencia])
+  @@unique([empresaId, idempotencyKey])
   @@map("operacion_api")
-}
-
-model AgenteIa {
-  id        String   @id @default(cuid())
-  empresaId String   @map("empresa_id")
-  nombre    String
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  turnos       Turno[]
-  eventosTurno EventoTurno[]
-
-  @@map("agente_ia")
 }

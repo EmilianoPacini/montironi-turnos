@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { format, addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
-import { EstadoTurno, OrigenTurno, TipoOcupacion } from "@prisma/client";
+import { CanalTurno, EstadoTurno, TipoOcupacion } from "@prisma/client";
 import { EstadoChip } from "@/components/turnos/EstadoChip";
-import { ORIGEN_LABELS, TURNO_STATE_COLORS } from "@/lib/modules/appointments/constants";
+import { CANAL_LABELS, TURNO_STATE_COLORS } from "@/lib/modules/appointments/constants";
 
 const HOUR_START = 8;
 const HOUR_END = 18;
@@ -20,14 +20,13 @@ interface Turno {
   id: string;
   bahiaId: string;
   inicio: Date | string;
-  fin: Date | string;
+  finalizaEn: Date | string;
   estado: EstadoTurno;
-  origen: OrigenTurno;
+  canal: CanalTurno;
   cliente: { nombre: string; apellido?: string | null };
   vehiculo: { patente: string };
   detalles: { nombreSnapshot: string }[];
   creador?: { nombre: string } | null;
-  agenteIa?: { nombre: string } | null;
 }
 
 interface Bloqueo {
@@ -128,7 +127,7 @@ export function AgendaGrid({
                 );
                 const hasTurno = bahiaTurnos.some((t) => {
                   const ini = toDate(t.inicio);
-                  const fin = toDate(t.fin);
+                  const fin = toDate(t.finalizaEn);
                   return ini <= slotStart && fin > slotStart;
                 });
                 const hasBlock = bahiaBloqueos.some((b) => {
@@ -174,12 +173,12 @@ export function AgendaGrid({
 
               {bahiaTurnos.map((turno) => {
                 const ini = toDate(turno.inicio);
-                const fin = toDate(turno.fin);
+                const fin = toDate(turno.finalizaEn);
                 const colors = TURNO_STATE_COLORS[turno.estado];
                 const actor =
-                  turno.origen === "panel"
+                  turno.canal === CanalTurno.interno
                     ? turno.creador?.nombre ?? "Panel"
-                    : turno.agenteIa?.nombre ?? ORIGEN_LABELS[turno.origen];
+                    : CANAL_LABELS[turno.canal];
 
                 return (
                   <Link
@@ -207,7 +206,7 @@ export function AgendaGrid({
                       {turno.cliente.nombre} · {turno.vehiculo.patente}
                     </p>
                     <p className="truncate opacity-75">
-                      {ORIGEN_LABELS[turno.origen]} · {actor}
+                      {CANAL_LABELS[turno.canal]} · {actor}
                     </p>
                   </Link>
                 );

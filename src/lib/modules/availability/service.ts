@@ -39,7 +39,7 @@ export async function getMargenMin(tallerId: string): Promise<number> {
   const config = await prisma.configuracionTurnos.findUnique({
     where: { tallerId },
   });
-  return config?.margenMin ?? 15;
+  return config?.margenMinutos ?? 15;
 }
 
 export async function calcularDuracionTotal(params: {
@@ -282,7 +282,6 @@ export async function getAgendaForDate(params: {
         bahia: true,
         detalles: true,
         creador: true,
-        agenteIa: true,
       },
       orderBy: { inicio: "asc" },
     }),

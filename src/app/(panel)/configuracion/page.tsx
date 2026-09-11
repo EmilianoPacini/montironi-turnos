@@ -7,7 +7,7 @@ import { RolUsuario } from "@prisma/client";
 export default async function ConfigPage() {
   const session = await getAuthSession();
 
-  if (session.rol !== RolUsuario.ADMIN) redirect("/agenda");
+  if (session.rol !== RolUsuario.admin) redirect("/agenda");
 
   const talleres = await listTalleres(session.empresaId);
 
@@ -28,9 +28,9 @@ export default async function ConfigPage() {
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Margen (minutos)</span>
               <input
-                name="margenMin"
+                name="margenMinutos"
                 type="number"
-                defaultValue={t.configuracion?.margenMin ?? 15}
+                defaultValue={t.configuracion?.margenMinutos ?? 15}
                 className="w-full rounded-lg border px-3 py-2"
               />
             </label>
@@ -60,7 +60,7 @@ export default async function ConfigPage() {
               </ul>
               <p className="mt-3 text-xs text-slate-500">
                 Horario: Lun–Vie 08:00–12:00 y 13:00–18:00 · Margen{" "}
-                {t.configuracion?.margenMin ?? 15} min
+                {t.configuracion?.margenMinutos ?? 15} min
               </p>
             </div>
           ))}

@@ -17,7 +17,7 @@ export const defaultSession: SessionData = {
   empresaId: "",
   email: "",
   nombre: "",
-  rol: RolUsuario.EMPLEADO,
+  rol: RolUsuario.empleado,
   isLoggedIn: false,
 };
 
@@ -53,7 +53,7 @@ export async function requireSession(): Promise<
 
 export async function requireAdmin() {
   const session = await requireSession();
-  if (session.rol !== RolUsuario.ADMIN) {
+  if (session.rol !== RolUsuario.admin) {
     throw new Error("FORBIDDEN");
   }
   return session;

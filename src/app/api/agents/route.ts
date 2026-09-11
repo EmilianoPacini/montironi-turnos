@@ -10,7 +10,7 @@ import {
   AppointmentError,
 } from "@/lib/modules/appointments/service";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
-import { OrigenTurno } from "@prisma/client";
+import { CanalTurno } from "@prisma/client";
 
 function unauthorized() {
   return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -25,6 +25,22 @@ function errorResponse(e: unknown) {
   }
   console.error(e);
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
+}
+
+function resolveCanal(body: { canal?: string; origen?: string }): CanalTurno {
+  const raw = body.canal ?? body.origen;
+  if (raw && Object.values(CanalTurno).includes(raw as CanalTurno)) {
+    return raw as CanalTurno;
+  }
+  const legacyMap: Record<string, CanalTurno> = {
+    panel: CanalTurno.interno,
+    voz: CanalTurno.telefono,
+    api: CanalTurno.agente_ia,
+  };
+  if (raw && legacyMap[raw]) {
+    return legacyMap[raw];
+  }
+  return CanalTurno.agente_ia;
 }
 
 async function resolveEmpresa(request: NextRequest) {
@@ -105,10 +121,9 @@ export async function POST(request: NextRequest) {
             vehiculoId: body.vehiculoId,
             servicioIds: body.servicioIds,
             inicio: new Date(body.inicio),
-            origen: (body.origen as OrigenTurno) ?? OrigenTurno.api,
+            canal: resolveCanal(body),
             notas: body.notas,
             confirmar: body.confirmar ?? true,
-            agenteIaId: body.agenteIaId,
           });
           return { turno };
         }
@@ -117,7 +132,6 @@ export async function POST(request: NextRequest) {
             turnoId: body.turnoId,
             empresaId: empresa.id,
             version: body.version,
-            agenteIaId: body.agenteIaId,
             motivo: body.motivo,
           });
           return { turno };
@@ -129,7 +143,6 @@ export async function POST(request: NextRequest) {
             bahiaId: body.bahiaId,
             inicio: new Date(body.inicio),
             version: body.version,
-            agenteIaId: body.agenteIaId,
           });
           return { turno };
         }

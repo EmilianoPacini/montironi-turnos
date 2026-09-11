@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { EstadoTurno } from "@prisma/client";
+import { EstadoTurno, RolUsuario } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import {
   createTurno,
@@ -208,7 +208,7 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
 export async function saveServicioAction(formData: FormData): Promise<void> {
   try {
     const session = await requireSession();
-    if (session.rol !== "ADMIN") redirect("/agenda");
+    if (session.rol !== RolUsuario.admin) redirect("/agenda");
 
     await createServicio({
       empresaId: session.empresaId,
@@ -229,11 +229,11 @@ export async function saveServicioAction(formData: FormData): Promise<void> {
 export async function saveConfigAction(formData: FormData): Promise<void> {
   try {
     const session = await requireSession();
-    if (session.rol !== "ADMIN") redirect("/agenda");
+    if (session.rol !== RolUsuario.admin) redirect("/agenda");
 
     await updateConfiguracionTaller(
       String(formData.get("tallerId")),
-      Number(formData.get("margenMin"))
+      Number(formData.get("margenMinutos"))
     );
     revalidatePath("/configuracion");
     redirect("/configuracion");

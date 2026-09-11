@@ -23,7 +23,7 @@ export function Sidebar({
   nombre: string;
   currentPath: string;
 }) {
-  const links = rol === RolUsuario.ADMIN ? adminLinks : empleadoLinks;
+  const links = rol === RolUsuario.admin ? adminLinks : empleadoLinks;
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -54,7 +54,7 @@ export function Sidebar({
       <div className="border-t border-slate-200 p-4">
         <p className="text-sm font-medium text-slate-900">{nombre}</p>
         <p className="text-xs text-slate-500">
-          {rol === RolUsuario.ADMIN ? "Administrador" : "Empleado"}
+          {rol === RolUsuario.admin ? "Administrador" : "Empleado"}
         </p>
         <form action={logoutAction} className="mt-3">
           <button
