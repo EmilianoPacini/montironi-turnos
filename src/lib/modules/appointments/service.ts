@@ -12,6 +12,7 @@ import { shouldLiberateOcupacion } from "@/lib/modules/agenda/domain/policies";
 import { turnoRepository } from "@/lib/modules/agenda/infrastructure/turno.repository";
 import { AppointmentError, DomainError } from "@/lib/modules/appointments/errors";
 import { registrarMovimiento } from "@/lib/modules/audit/movimiento.service";
+import { upsertHistorialDesdeTurnoFinalizado } from "@/lib/modules/historial/service";
 
 export const PAST_SLOT_MESSAGE = "No se permiten asignar turnos para horarios vencidos";
 
@@ -593,11 +594,14 @@ export async function transitionTurnoState(params: {
         tx,
         empresaId: params.empresaId,
       });
-      if (params.nuevoEstado === EstadoTurno.finalizado && turno.kilometraje != null) {
-        await tx.vehiculo.update({
-          where: { id: turno.vehiculoId },
-          data: { kilometrajeActual: turno.kilometraje },
-        });
+      if (params.nuevoEstado === EstadoTurno.finalizado) {
+        if (turno.kilometraje != null) {
+          await tx.vehiculo.update({
+            where: { id: turno.vehiculoId },
+            data: { kilometrajeActual: turno.kilometraje },
+          });
+        }
+        await upsertHistorialDesdeTurnoFinalizado(turno.id, tx);
       }
       return result;
     });
