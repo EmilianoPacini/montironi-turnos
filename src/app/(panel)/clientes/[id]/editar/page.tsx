@@ -14,7 +14,7 @@ export default async function EditarClientePage({ params }: { params: Promise<{ 
     <div className="p-6 lg:p-8">
       <Link href={`/clientes/${id}`} className="text-sm text-slate-600">← Cliente</Link>
       <h1 className="mt-4 text-2xl font-bold">Editar cliente</h1>
-      <ClienteForm cliente={cliente} />
+      <ClienteForm key={cliente.id} cliente={cliente} />
     </div>
   );
 }

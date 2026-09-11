@@ -24,6 +24,7 @@ export default async function NuevoVehiculoPage({ params }: { params: Promise<{ 
       </p>
       <div className="mt-6">
         <VehiculoForm
+          key="nuevo"
           clienteId={id}
           submitLabel="Guardar vehículo"
           cancelHref={`/clientes/${id}#vehiculos`}

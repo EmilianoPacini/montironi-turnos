@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type ActionResult = { error: string } | void | unknown;
 
-export function useActionTransition() {
+export function useActionTransition(onError?: (message: string) => void) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -13,7 +13,7 @@ export function useActionTransition() {
     startTransition(async () => {
       const result = await action();
       if (result && typeof result === "object" && "error" in result) {
-        alert((result as { error: string }).error);
+        onError?.((result as { error: string }).error);
         return;
       }
       router.refresh();

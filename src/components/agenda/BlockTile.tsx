@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { removeBlockAction } from "@/lib/modules/appointments/actions";
 import { useActionTransition } from "@/components/turnos/use-action-transition";
 
@@ -16,12 +17,14 @@ export function BlockTile({
   motivo?: string | null;
   autor?: string;
 }) {
-  const { pending, runAction } = useActionTransition();
+  const [error, setError] = useState<string | undefined>();
+  const { pending, runAction } = useActionTransition(setError);
 
   function handleRemove(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm("¿Quitar este bloqueo de bahía?")) return;
+    setError(undefined);
     runAction(() => removeBlockAction(blockId));
   }
 
@@ -35,6 +38,7 @@ export function BlockTile({
           <span className="font-semibold">Bloqueado</span>
           {motivo ? ` · ${motivo}` : ""}
           {autor ? <span className="block text-[10px] opacity-75">por {autor}</span> : null}
+          {error ? <span className="mt-1 block text-[10px] font-medium text-red-700">{error}</span> : null}
         </div>
         <button
           type="button"

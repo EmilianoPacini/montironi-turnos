@@ -29,6 +29,7 @@ export default async function EditarVehiculoPage({
       <p className="panel-subtitle">Patente {vehiculo.patente}</p>
       <div className="mt-6">
         <VehiculoForm
+          key={vehiculo.patente}
           clienteId={id}
           vehiculo={vehiculo}
           submitLabel="Guardar cambios"

@@ -8,6 +8,8 @@ import {
 import {
   fieldErrorsForClienteValidation,
   fieldForClienteValidation,
+  focusFieldForBloquearDomainError,
+  focusFieldForReprogramarDomainError,
   focusFieldForTurnoDomainError,
 } from "@/lib/form-field-errors";
 
@@ -52,5 +54,7 @@ describe("form-field-errors", () => {
   it("maps turno domain errors to focus targets", () => {
     expect(focusFieldForTurnoDomainError("HorarioVencido")).toBe("fecha");
     expect(focusFieldForTurnoDomainError("BahiaIncompatible")).toBe("bahiaId");
+    expect(focusFieldForReprogramarDomainError("CapacidadConflicto")).toBe("inicio");
+    expect(focusFieldForBloquearDomainError("BloqueoInvalido")).toBe("motivo");
   });
 });

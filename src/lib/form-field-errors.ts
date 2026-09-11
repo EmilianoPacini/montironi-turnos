@@ -62,6 +62,64 @@ export function focusFieldForTurnoDomainError(code: DomainErrorCode): string | u
   }
 }
 
+export function fieldErrorsForReprogramarDomainError(
+  code: DomainErrorCode,
+  message: string
+): Partial<Record<string, string>> | undefined {
+  switch (code) {
+    case "HorarioVencido":
+    case "CapacidadConflicto":
+    case "FueraDeHorario":
+    case "TurnoNoReprogramable":
+      return { inicio: message };
+    case "BahiaIncompatible":
+      return { bahiaId: message };
+    default:
+      return undefined;
+  }
+}
+
+export function focusFieldForReprogramarDomainError(code: DomainErrorCode): string | undefined {
+  switch (code) {
+    case "BahiaIncompatible":
+      return "bahiaId";
+    case "HorarioVencido":
+    case "CapacidadConflicto":
+    case "FueraDeHorario":
+    case "TurnoNoReprogramable":
+      return "inicio";
+    default:
+      return undefined;
+  }
+}
+
+export function fieldErrorsForBloquearDomainError(
+  code: DomainErrorCode,
+  message: string
+): Partial<Record<string, string>> | undefined {
+  switch (code) {
+    case "BloqueoInvalido":
+      return { motivo: message };
+    case "CapacidadConflicto":
+    case "FueraDeHorario":
+      return { inicio: message, fin: message };
+    default:
+      return undefined;
+  }
+}
+
+export function focusFieldForBloquearDomainError(code: DomainErrorCode): string | undefined {
+  switch (code) {
+    case "BloqueoInvalido":
+      return "motivo";
+    case "CapacidadConflicto":
+    case "FueraDeHorario":
+      return "inicio";
+    default:
+      return undefined;
+  }
+}
+
 export function invalidFieldClass(
   field: string,
   baseClass: string,

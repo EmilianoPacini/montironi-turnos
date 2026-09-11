@@ -12,7 +12,7 @@ export default async function NuevoClientePage() {
         ← Clientes
       </Link>
       <h1 className="mt-4 text-2xl font-bold">Nuevo cliente</h1>
-      <ClienteForm />
+      <ClienteForm key="nuevo" />
     </div>
   );
 }

@@ -31,9 +31,13 @@ import {
   type FormActionState,
 } from "@/lib/form-action-state";
 import {
+  fieldErrorsForBloquearDomainError,
   fieldErrorsForClienteValidation,
+  fieldErrorsForReprogramarDomainError,
   fieldErrorsForTurnoDomainError,
   fieldErrorsForVehiculoValidation,
+  focusFieldForBloquearDomainError,
+  focusFieldForReprogramarDomainError,
   focusFieldForTurnoDomainError,
 } from "@/lib/form-field-errors";
 
@@ -74,6 +78,52 @@ export type TurnoFormValues = {
 };
 
 export type TurnoFormState = FormActionState<TurnoFormValues>;
+
+export type ReprogramarFormValues = {
+  bahiaId: string;
+  inicio: string;
+};
+
+export type ReprogramarFormState = FormActionState<ReprogramarFormValues>;
+
+export type BloquearFormValues = {
+  bahiaId: string;
+  inicio: string;
+  fin: string;
+  motivo: string;
+};
+
+export type BloquearFormState = FormActionState<BloquearFormValues>;
+
+export type InlineClienteFormValues = {
+  nombre: string;
+  apellido: string;
+  telefono: string;
+};
+
+function extractReprogramarFormValues(formData: FormData): ReprogramarFormValues {
+  return {
+    bahiaId: readString(formData, "bahiaId"),
+    inicio: readString(formData, "inicio"),
+  };
+}
+
+function extractBloquearFormValues(formData: FormData): BloquearFormValues {
+  return {
+    bahiaId: readString(formData, "bahiaId"),
+    inicio: readString(formData, "inicio"),
+    fin: readString(formData, "fin"),
+    motivo: readString(formData, "motivo"),
+  };
+}
+
+function extractInlineClienteFormValues(formData: FormData): InlineClienteFormValues {
+  return {
+    nombre: readString(formData, "nombre"),
+    apellido: readString(formData, "apellido"),
+    telefono: readString(formData, "telefono"),
+  };
+}
 
 function extractClienteFormValues(formData: FormData): ClienteFormValues {
   return {
@@ -245,50 +295,86 @@ export async function cancelTurnoAction(turnoId: string, version: number, motivo
   }
 }
 
-export async function rescheduleTurnoAction(formData: FormData): Promise<void> {
+export async function rescheduleTurnoAction(
+  _prev: ReprogramarFormState | undefined,
+  formData: FormData
+): Promise<ReprogramarFormState | undefined> {
   const turnoId = String(formData.get("turnoId"));
-  const returnPath = `/turnos/${turnoId}/reprogramar`;
+  const values = extractReprogramarFormValues(formData);
 
   try {
     const session = await requireSession();
+    if (!values.inicio) {
+      return formActionError(
+        "El nuevo inicio es obligatorio",
+        values,
+        { inicio: "El nuevo inicio es obligatorio" },
+        "inicio"
+      );
+    }
+
     await rescheduleTurno({
       turnoId,
       empresaId: session.empresaId,
-      bahiaId: String(formData.get("bahiaId") ?? "") || undefined,
-      inicio: new Date(String(formData.get("inicio"))),
+      bahiaId: values.bahiaId || undefined,
+      inicio: new Date(values.inicio),
       version: Number(formData.get("version")),
       usuarioId: session.userId,
     });
     revalidatePath("/agenda");
     redirect(`/turnos/${turnoId}`);
   } catch (e) {
-    handleFormError(e, returnPath);
+    if (isDomainError(e)) {
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForReprogramarDomainError(e.code, e.message),
+        focusFieldForReprogramarDomainError(e.code)
+      );
+    }
+    if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
+    throw e;
   }
 }
 
-export async function blockBahiaAction(formData: FormData): Promise<void> {
-  const bahiaId = String(formData.get("bahiaId"));
-  const returnPath = `/agenda/bloquear?bahiaId=${bahiaId}`;
+export async function blockBahiaAction(
+  _prev: BloquearFormState | undefined,
+  formData: FormData
+): Promise<BloquearFormState | undefined> {
+  const values = extractBloquearFormValues(formData);
 
   try {
     const session = await requireSession();
-    const motivo = String(formData.get("motivo") ?? "").trim();
-    if (!motivo) {
-      redirectWithError(returnPath, "El motivo es obligatorio para bloqueos");
+    if (!values.motivo) {
+      return formActionError(
+        "El motivo es obligatorio para bloqueos",
+        values,
+        { motivo: "El motivo es obligatorio para bloqueos" },
+        "motivo"
+      );
     }
 
     await blockBahia({
       empresaId: session.empresaId,
-      bahiaId,
-      inicio: new Date(String(formData.get("inicio"))),
-      fin: new Date(String(formData.get("fin"))),
-      motivo,
+      bahiaId: values.bahiaId,
+      inicio: new Date(values.inicio),
+      fin: new Date(values.fin),
+      motivo: values.motivo,
       usuarioId: session.userId,
     });
     revalidatePath("/agenda");
     redirect("/agenda");
   } catch (e) {
-    handleFormError(e, returnPath);
+    if (isDomainError(e)) {
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForBloquearDomainError(e.code, e.message),
+        focusFieldForBloquearDomainError(e.code)
+      );
+    }
+    if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
+    throw e;
   }
 }
 
@@ -385,13 +471,14 @@ export async function saveClienteAction(
 }
 
 export async function createClienteInlineAction(formData: FormData) {
+  const values = extractInlineClienteFormValues(formData);
   try {
     const session = await requireSession();
     const cliente = await upsertCliente({
       empresaId: session.empresaId,
-      nombre: String(formData.get("nombre")),
-      apellido: String(formData.get("apellido")),
-      telefono: String(formData.get("telefono")),
+      nombre: values.nombre,
+      apellido: values.apellido,
+      telefono: values.telefono,
     });
     revalidatePath("/clientes");
     return {
@@ -404,30 +491,52 @@ export async function createClienteInlineAction(formData: FormData) {
       },
     };
   } catch (e) {
-    if (e instanceof ClienteValidationError) return { error: e.message };
+    if (e instanceof ClienteValidationError) {
+      const fieldErrors = fieldErrorsForClienteValidation(e.message);
+      return {
+        error: e.message,
+        fieldErrors,
+        focusField: fieldErrors ? Object.keys(fieldErrors)[0] : undefined,
+      };
+    }
     throw e;
   }
 }
 
 export async function createVehiculoInlineAction(formData: FormData) {
+  const values = extractVehiculoFormValues(formData);
   try {
     const session = await requireSession();
+    if (!values.patente) {
+      return {
+        error: "La patente es obligatoria",
+        fieldErrors: { patente: "La patente es obligatoria" },
+        focusField: "patente",
+      };
+    }
     const vehiculo = await upsertVehiculo({
       empresaId: session.empresaId,
       clienteId: String(formData.get("clienteId")),
-      patente: String(formData.get("patente")),
-      marca: String(formData.get("marca") ?? "") || undefined,
-      modelo: String(formData.get("modelo") ?? "") || undefined,
-      tipoVehiculo: (String(formData.get("tipoVehiculo") ?? "auto") as TipoVehiculo),
-      condicion: (String(formData.get("condicion") ?? "normal") as CondicionVehiculo),
-      kilometrajeActual: formData.get("kilometrajeActual")
-        ? Number(formData.get("kilometrajeActual"))
+      patente: values.patente,
+      marca: values.marca || undefined,
+      modelo: values.modelo || undefined,
+      tipoVehiculo: values.tipoVehiculo,
+      condicion: values.condicion,
+      kilometrajeActual: values.kilometrajeActual
+        ? Number(values.kilometrajeActual)
         : undefined,
     });
     revalidatePath("/clientes");
     return { vehiculo };
   } catch (e) {
-    if (e instanceof ClienteValidationError) return { error: e.message };
+    if (e instanceof ClienteValidationError) {
+      const fieldErrors = fieldErrorsForVehiculoValidation(e.message);
+      return {
+        error: e.message,
+        fieldErrors,
+        focusField: fieldErrors ? Object.keys(fieldErrors)[0] : undefined,
+      };
+    }
     throw e;
   }
 }

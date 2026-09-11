@@ -4,15 +4,13 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
   createTurnoAction,
-  createClienteInlineAction,
-  createVehiculoInlineAction,
   type TurnoFormState,
 } from "@/lib/modules/appointments/actions";
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
 import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
-import { VehiculoFields } from "@/components/clientes/VehiculoFields";
-import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
+import { InlineClienteModal } from "@/components/clientes/InlineClienteModal";
+import { InlineVehiculoModal } from "@/components/clientes/InlineVehiculoModal";
 
 interface ClienteOption {
   id: string;
@@ -91,8 +89,6 @@ export function NuevoTurnoForm({
   const [localFocusKey, setLocalFocusKey] = useState<number | undefined>();
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [showVehiculoModal, setShowVehiculoModal] = useState(false);
-  const [clientePending, setClientePending] = useState(false);
-  const [vehiculoPending, setVehiculoPending] = useState(false);
 
   useEffect(() => {
     if (!state?.values) return;
@@ -147,55 +143,6 @@ export function NuevoTurnoForm({
       delete next.servicioIds;
       return next;
     });
-  }
-
-  async function handleInlineCliente(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setClientePending(true);
-    const fd = new FormData(e.currentTarget);
-    const result = await createClienteInlineAction(fd);
-    setClientePending(false);
-    if ("error" in result) {
-      setInlineError(result.error);
-      return;
-    }
-    setClientes((prev) => [...prev, result.cliente]);
-    setClienteId(result.cliente.id);
-    setShowClienteModal(false);
-    setInlineError(undefined);
-  }
-
-  async function handleInlineVehiculo(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!clienteId) return;
-    setVehiculoPending(true);
-    const fd = new FormData(e.currentTarget);
-    fd.set("clienteId", clienteId);
-    const result = await createVehiculoInlineAction(fd);
-    setVehiculoPending(false);
-    if ("error" in result) {
-      setInlineError(result.error);
-      return;
-    }
-    setClientes((prev) =>
-      prev.map((c) =>
-        c.id === clienteId
-          ? {
-              ...c,
-              vehiculos: [
-                ...c.vehiculos,
-                {
-                  vehiculoId: result.vehiculo.id,
-                  vehiculo: { patente: result.vehiculo.patente, marca: result.vehiculo.marca },
-                },
-              ],
-            }
-          : c
-      )
-    );
-    setVehiculoId(result.vehiculo.id);
-    setShowVehiculoModal(false);
-    setInlineError(undefined);
   }
 
   return (
@@ -417,45 +364,41 @@ export function NuevoTurnoForm({
         </button>
       </form>
 
-      {showClienteModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={handleInlineCliente} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
-            <h3 className="font-semibold">Nuevo cliente</h3>
-            <ClienteCoreFields className="w-full rounded border px-3 py-2" />
-            <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={clientePending} className="btn-primary">Guardar</button>
-              <button type="button" onClick={() => setShowClienteModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <InlineClienteModal
+        open={showClienteModal}
+        onClose={() => setShowClienteModal(false)}
+        onCreated={(cliente) => {
+          setClientes((prev) => [...prev, cliente]);
+          setClienteId(cliente.id);
+          setInlineError(undefined);
+        }}
+      />
 
-      {showVehiculoModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form
-            onSubmit={handleInlineVehiculo}
-            className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl"
-          >
-            <h3 className="text-lg font-semibold text-slate-900">Nuevo vehículo</h3>
-            <p className="text-sm text-slate-600">
-              Mismos campos que en la ficha del cliente.
-            </p>
-            <VehiculoFields />
-            <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={vehiculoPending} className="btn-primary">
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowVehiculoModal(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <InlineVehiculoModal
+        open={showVehiculoModal}
+        clienteId={clienteId}
+        onClose={() => setShowVehiculoModal(false)}
+        onCreated={(vehiculo) => {
+          setClientes((prev) =>
+            prev.map((c) =>
+              c.id === clienteId
+                ? {
+                    ...c,
+                    vehiculos: [
+                      ...c.vehiculos,
+                      {
+                        vehiculoId: vehiculo.id,
+                        vehiculo: { patente: vehiculo.patente, marca: vehiculo.marca },
+                      },
+                    ],
+                  }
+                : c
+            )
+          );
+          setVehiculoId(vehiculo.id);
+          setInlineError(undefined);
+        }}
+      />
     </>
   );
 }
