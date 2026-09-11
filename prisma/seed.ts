@@ -191,9 +191,9 @@ async function main() {
 
   await prisma.servicioIntervaloKm.createMany({
     data: [
-      { servicioId: servicios[0].id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
-      { servicioId: servicios[0].id, tipoVehiculo: "camioneta", condicion: "normal", intervaloKm: 8000 },
-      { servicioId: servicios[2].id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
+      { servicioId: servicios[0].id, empresaId: empresa.id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
+      { servicioId: servicios[0].id, empresaId: empresa.id, tipoVehiculo: "camioneta", condicion: "normal", intervaloKm: 8000 },
+      { servicioId: servicios[2].id, empresaId: empresa.id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
     ],
   });
 

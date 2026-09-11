@@ -115,6 +115,7 @@ model Empresa {
   turnos         Turno[]
   operacionesApi     OperacionApi[]
   movimientos        Movimiento[]
+  intervalosKm       ServicioIntervaloKm[]
   whatsappAccounts   WhatsappAccount[]
   wahConversations   WahConversation[]
   wahMessages        WahMessage[]
@@ -343,13 +344,16 @@ model Vehiculo {
 model ServicioIntervaloKm {
   id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   servicioId   String            @map("servicio_id") @db.Uuid
+  empresaId    String            @map("empresa_id") @db.Uuid
   tipoVehiculo TipoVehiculo      @map("tipo_vehiculo")
   condicion    CondicionVehiculo @map("condicion")
   intervaloKm  Int               @map("intervalo_km")
 
   servicio Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  empresa  Empresa  @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
   @@unique([servicioId, tipoVehiculo, condicion])
+  @@index([empresaId], map: "ix_servicio_intervalo_km_empresa")
   @@map("servicio_intervalo_km")
 }
 
