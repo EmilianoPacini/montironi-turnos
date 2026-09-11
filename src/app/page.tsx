@@ -1,10 +1,15 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
+import { readCookieSessionId, validateServerSession } from "@/lib/auth/session/index";
 
 export default async function HomePage() {
-  const session = await getSession();
-  if (session.isLoggedIn) {
-    redirect("/agenda");
+  const sessionId = await readCookieSessionId();
+  if (sessionId) {
+    try {
+      await validateServerSession(sessionId, { touch: false });
+      redirect("/agenda");
+    } catch {
+      // stale or invalid cookie — fall through to login
+    }
   }
   redirect("/login");
 }

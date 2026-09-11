@@ -1,9 +1,23 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/db";
-import { getSession } from "@/lib/auth/session";
+import { destroyClientSession } from "@/lib/auth/session";
+import {
+  createServerSession,
+  revokeServerSession,
+  setCookieSessionId,
+  readCookieSessionId,
+} from "@/lib/auth/session/index";
 import { verifyPassword, hashPassword } from "@/lib/auth/password";
+
+function extractClientMetadata(headerStore: Headers) {
+  const userAgent = headerStore.get("user-agent");
+  const forwarded = headerStore.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0]?.trim() ?? headerStore.get("x-real-ip") ?? null;
+  return { userAgent, ip };
+}
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -22,21 +36,26 @@ export async function loginAction(formData: FormData) {
     return { error: "Credenciales inválidas" };
   }
 
-  const session = await getSession();
-  session.userId = usuario.id;
-  session.empresaId = usuario.empresaId;
-  session.email = usuario.email;
-  session.nombre = usuario.nombre;
-  session.rol = usuario.rol;
-  session.isLoggedIn = true;
-  await session.save();
+  const headerStore = await headers();
+  const { userAgent, ip } = extractClientMetadata(headerStore);
 
+  const { sessionId } = await createServerSession({
+    usuarioId: usuario.id,
+    empresaId: usuario.empresaId,
+    userAgent,
+    ip,
+  });
+
+  await setCookieSessionId(sessionId);
   redirect("/agenda");
 }
 
 export async function logoutAction() {
-  const session = await getSession();
-  session.destroy();
+  const sessionId = await readCookieSessionId();
+  if (sessionId) {
+    await revokeServerSession(sessionId);
+  }
+  await destroyClientSession();
   redirect("/login");
 }
 
