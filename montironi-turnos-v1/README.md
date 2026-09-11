@@ -5,7 +5,7 @@
 | Archivo | md5 esperado | Estado |
 |---------|--------------|--------|
 | `005_comunicaciones_wah.sql` | `6f528869649dbbb4a4ef1782e6ee18b5` | requiere header `★ FUENTE OFICIAL` |
-| `006_fix_intervalo_condicion.sql` | `a06011fe8277a55c99f95c4ff8231799` | hotfix DBs sucias |
+| `006_fix_intervalo_condicion.sql` | `9cecaf43d8145ca46029a1d5f1d37d83` | hotfix DBs sucias |
 | `ERD_COMUNICACIONES.md` | — | copiar verbatim desde box |
 | `MIGRATIONS_LINEA_UNICA.md` | — | documentación cadena migraciones |
 

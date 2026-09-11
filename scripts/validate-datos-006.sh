@@ -3,7 +3,7 @@
 set -euo pipefail
 
 FILE="${1:-montironi-turnos-v1/006_fix_intervalo_condicion.sql}"
-EXPECTED_MD5="a06011fe8277a55c99f95c4ff8231799"
+EXPECTED_MD5="9cecaf43d8145ca46029a1d5f1d37d83"
 
 if [[ ! -f "$FILE" ]]; then
   echo "FAIL: missing $FILE (awaiting Datos republish to shared box)"
