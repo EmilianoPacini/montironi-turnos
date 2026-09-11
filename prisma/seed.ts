@@ -5,10 +5,9 @@ import {
   CanalTurno,
   RolUsuario,
   ModoPrecio,
-  DireccionMensajeWah,
 } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
-import { addMinutes, setHours, setMinutes, startOfDay, subHours, subMinutes } from "date-fns";
+import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 
 const prisma = new PrismaClient();
 
@@ -20,8 +19,10 @@ function timeOnToday(h: number, m: number): Date {
 async function main() {
   console.log("🌱 Sembrando base de datos Montironi...");
 
-  await prisma.mensajeWah.deleteMany();
-  await prisma.conversacionWah.deleteMany();
+  await prisma.wahMessage.deleteMany();
+  await prisma.wahConversation.deleteMany();
+  await prisma.wahMedia.deleteMany();
+  await prisma.whatsappAccount.deleteMany();
   await prisma.eventoTurno.deleteMany();
   await prisma.detalleTurno.deleteMany();
   await prisma.ocupacionBahia.deleteMany();
@@ -328,69 +329,53 @@ async function main() {
     },
   });
 
-  const now = new Date();
-  const conversacionesSeed = [
-    {
-      cliente: clientes[0],
-      mensajes: [
-        { dir: DireccionMensajeWah.entrante, cuerpo: "Hola, ¿tienen turno para service esta semana?", at: subHours(now, 2) },
-        { dir: DireccionMensajeWah.saliente, cuerpo: "¡Hola María! Sí, tenemos disponibilidad el jueves a las 10:00.", at: subMinutes(subHours(now, 2), -12) },
-        { dir: DireccionMensajeWah.entrante, cuerpo: "Perfecto, reservame ese horario por favor.", at: subMinutes(subHours(now, 1), 30) },
-      ],
-      noLeidos: 1,
+  const waAccount = await prisma.whatsappAccount.create({
+    data: {
+      empresaId: empresa.id,
+      phoneNumberId: "PLACEHOLDER_PHONE_NUMBER_ID",
+      displayPhoneNumber: "+54 351 555-0100",
+      label: "Montironi Postventa (demo)",
+      wabaId: "demo-waba-placeholder",
     },
-    {
-      cliente: clientes[1],
-      mensajes: [
-        { dir: DireccionMensajeWah.entrante, cuerpo: "Buen día, consulta por frenos del Ranger.", at: subHours(now, 5) },
-        { dir: DireccionMensajeWah.saliente, cuerpo: "Hola Carlos, el service de frenos demora aprox. 1 hora. ¿Querés agendar?", at: subHours(now, 4) },
-      ],
-      noLeidos: 0,
-    },
-    {
-      cliente: clientes[2],
-      mensajes: [
-        { dir: DireccionMensajeWah.entrante, cuerpo: "¿Cuánto sale la alineación?", at: subHours(now, 1) },
-      ],
-      noLeidos: 1,
-    },
-    {
-      cliente: null as (typeof clientes)[0] | null,
-      telefono: "+5491155551999",
-      nombreContacto: "Consulta web",
-      mensajes: [
-        { dir: DireccionMensajeWah.entrante, cuerpo: "Hola, vi el anuncio en Instagram. ¿Atienden los sábados?", at: subMinutes(now, 45) },
-      ],
-      noLeidos: 1,
-    },
-  ];
+  });
 
-  for (const spec of conversacionesSeed) {
-    const ultimo = spec.mensajes[spec.mensajes.length - 1];
-    const conversacion = await prisma.conversacionWah.create({
-      data: {
+  const waConv = await prisma.wahConversation.create({
+    data: {
+      empresaId: empresa.id,
+      accountId: waAccount.id,
+      clienteId: clientes[0].id,
+      waContactId: "5493515551234@s.whatsapp.net",
+      contactName: `${clientes[0].nombre} ${clientes[0].apellido}`,
+      contactPhone: clientes[0].telefono,
+      lastMessageAt: new Date(),
+      lastMessagePreview: "Hola, quiero un turno para service",
+      unreadCount: 1,
+      pendingHuman: true,
+    },
+  });
+
+  await prisma.wahMessage.createMany({
+    data: [
+      {
         empresaId: empresa.id,
-        clienteId: spec.cliente?.id ?? null,
-        telefono: spec.cliente?.telefono ?? spec.telefono!,
-        nombreContacto: spec.cliente ? null : spec.nombreContacto,
-        ultimoMensaje: ultimo.cuerpo,
-        ultimoMensajeAt: ultimo.at,
-        noLeidos: spec.noLeidos,
+        conversationId: waConv.id,
+        direction: "inbound",
+        senderType: "contact",
+        messageType: "text",
+        body: "Hola, quiero un turno para service",
+        status: "received",
       },
-    });
-
-    for (const msg of spec.mensajes) {
-      await prisma.mensajeWah.create({
-        data: {
-          conversacionId: conversacion.id,
-          direccion: msg.dir,
-          cuerpo: msg.cuerpo,
-          leido: msg.dir === DireccionMensajeWah.saliente || spec.noLeidos === 0,
-          enviadoAt: msg.at,
-        },
-      });
-    }
-  }
+      {
+        empresaId: empresa.id,
+        conversationId: waConv.id,
+        direction: "outbound",
+        senderType: "bot",
+        messageType: "text",
+        body: "¡Hola! ¿Qué patente es tu vehículo?",
+        status: "sent",
+      },
+    ],
+  });
 
   console.log("✅ Seed completado");
   console.log("   Admin: admin@montironi.com / admin123");

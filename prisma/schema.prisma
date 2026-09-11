@@ -98,13 +98,6 @@ enum CondicionVehiculo {
   @@map("condicion_vehiculo")
 }
 
-enum DireccionMensajeWah {
-  entrante
-  saliente
-
-  @@map("direccion_mensaje_wah")
-}
-
 model Empresa {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre    String
@@ -120,9 +113,12 @@ model Empresa {
   clientes       Cliente[]
   vehiculos      Vehiculo[]
   turnos         Turno[]
-  operacionesApi    OperacionApi[]
-  movimientos       Movimiento[]
-  conversacionesWah ConversacionWah[]
+  operacionesApi     OperacionApi[]
+  movimientos        Movimiento[]
+  whatsappAccounts   WhatsappAccount[]
+  wahConversations   WahConversation[]
+  wahMessages        WahMessage[]
+  wahMedia           WahMedia[]
 
   @@map("empresa")
 }
@@ -312,9 +308,9 @@ model Cliente {
 
   empresa    Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   vehiculos  ClienteVehiculo[]
-  documentos        DocumentoCliente[]
-  turnos            Turno[]
-  conversacionesWah ConversacionWah[]
+  documentos       DocumentoCliente[]
+  turnos           Turno[]
+  wahConversations WahConversation[]
 
   @@index([empresaId, telefono])
   @@map("cliente")
@@ -498,38 +494,118 @@ model Movimiento {
   @@map("movimiento")
 }
 
-model ConversacionWah {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  empresaId       String    @map("empresa_id") @db.Uuid
-  clienteId       String?   @map("cliente_id") @db.Uuid
-  telefono        String
-  nombreContacto  String?   @map("nombre_contacto")
-  ultimoMensaje   String?   @map("ultimo_mensaje")
-  ultimoMensajeAt DateTime? @map("ultimo_mensaje_at") @db.Timestamptz(6)
-  noLeidos        Int       @default(0) @map("no_leidos")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+enum WahMessageDirection {
+  inbound
+  outbound
 
-  empresa  Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  cliente  Cliente?     @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  mensajes MensajeWah[]
-
-  @@unique([empresaId, telefono])
-  @@index([empresaId, ultimoMensajeAt(sort: Desc)])
-  @@map("conversacion_wah")
+  @@map("wah_message_direction")
 }
 
-model MensajeWah {
+enum WahSenderType {
+  contact
+  human
+  bot
+  integration
+
+  @@map("wah_sender_type")
+}
+
+enum WahMessageType {
+  text
+  audio
+  file
+  image
+  document
+  video
+  sticker
+  system
+
+  @@map("wah_message_type")
+}
+
+model WhatsappAccount {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  phoneNumberId      String   @map("phone_number_id")
+  displayPhoneNumber String?  @map("display_phone_number")
+  wabaId             String?  @map("waba_id")
+  label              String?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa       Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  conversations WahConversation[]
+
+  @@unique([empresaId, phoneNumberId])
+  @@index([empresaId, active])
+  @@map("whatsapp_accounts")
+}
+
+model WahConversation {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String    @map("empresa_id") @db.Uuid
+  accountId          String    @map("account_id") @db.Uuid
+  clienteId          String?   @map("cliente_id") @db.Uuid
+  waContactId        String    @map("wa_contact_id")
+  contactName        String?   @map("contact_name")
+  contactPhone       String    @map("contact_phone")
+  lastMessageAt      DateTime? @map("last_message_at") @db.Timestamptz(6)
+  lastMessagePreview String?   @map("last_message_preview")
+  unreadCount        Int       @default(0) @map("unread_count")
+  botPaused          Boolean   @default(false) @map("bot_paused")
+  pendingHuman       Boolean   @default(false) @map("pending_human")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa  Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  account  WhatsappAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  cliente  Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  messages WahMessage[]
+
+  @@unique([accountId, waContactId])
+  @@index([empresaId, lastMessageAt(sort: Desc)])
+  @@index([empresaId, pendingHuman])
+  @@index([empresaId, unreadCount])
+  @@map("wah_conversations")
+}
+
+model WahMedia {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String   @map("empresa_id") @db.Uuid
+  mimeType    String   @map("mime_type")
+  fileName    String   @map("file_name")
+  storagePath String   @map("storage_path")
+  fileSize    Int?     @map("file_size")
+  sha256      String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa  Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  messages WahMessage[]
+
+  @@index([empresaId, createdAt(sort: Desc)])
+  @@map("wah_media")
+}
+
+model WahMessage {
   id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversacionId String              @map("conversacion_id") @db.Uuid
-  direccion      DireccionMensajeWah
-  cuerpo         String
-  leido          Boolean             @default(false)
-  enviadoAt      DateTime            @map("enviado_at") @db.Timestamptz(6)
+  empresaId      String              @map("empresa_id") @db.Uuid
+  conversationId String              @map("conversation_id") @db.Uuid
+  direction      WahMessageDirection
+  senderType     WahSenderType       @map("sender_type")
+  messageType    WahMessageType      @map("message_type")
+  body           String?
+  waMessageId    String?             @map("wa_message_id")
+  mediaId        String?             @map("media_id") @db.Uuid
+  status         String              @default("sent")
+  metadata       Json?
   createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  conversacion ConversacionWah @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  empresa      Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  conversation WahConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  media        WahMedia?       @relation(fields: [mediaId], references: [id], onDelete: SetNull)
 
-  @@index([conversacionId, enviadoAt])
-  @@map("mensaje_wah")
+  @@index([conversationId, createdAt(sort: Asc)])
+  @@index([empresaId, createdAt(sort: Desc)])
+  @@map("wah_messages")
 }

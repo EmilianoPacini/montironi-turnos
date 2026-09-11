@@ -1,15 +1,13 @@
-import { WahChatPanel } from "@/components/comunicaciones/WahChatPanel";
+import { WahInbox } from "@/components/wah/WahInbox";
 
 export default function ComunicacionesPage() {
   return (
     <div className="panel-page flex h-full flex-col">
-      <div className="mb-4 shrink-0">
+      <div className="mb-2">
         <h1 className="panel-title">Comunicaciones</h1>
-        <p className="panel-subtitle">
-          WhatsApp del taller — conversaciones con clientes y respuestas del equipo.
-        </p>
+        <p className="panel-subtitle">Bandeja WhatsApp · respuestas humanas e integración bot</p>
       </div>
-      <WahChatPanel />
+      <WahInbox />
     </div>
   );
 }
