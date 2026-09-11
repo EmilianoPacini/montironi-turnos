@@ -30,6 +30,7 @@ export async function upsertIntervaloKm(params: {
     },
     create: {
       servicioId: params.servicioId,
+      empresaId: params.empresaId,
       tipoVehiculo: params.tipoVehiculo,
       condicion: params.condicion,
       intervaloKm: params.intervaloKm,
