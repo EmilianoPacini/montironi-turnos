@@ -20,6 +20,12 @@ function unauthorized() {
 }
 
 function errorResponse(e: unknown) {
+  if (e instanceof ClienteValidationError) {
+    return NextResponse.json(
+      { error: e.message, code: "ValidacionCliente" },
+      { status: 422 }
+    );
+  }
   if (isDomainError(e)) {
     return NextResponse.json(
       { error: e.message, code: e.code },
