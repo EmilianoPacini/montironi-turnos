@@ -38,7 +38,7 @@ export default async function ConfigPage() {
             </label>
             <button
               type="submit"
-              className="mt-3 rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white"
+              className="btn-primary-lg mt-3"
             >
               Guardar
             </button>

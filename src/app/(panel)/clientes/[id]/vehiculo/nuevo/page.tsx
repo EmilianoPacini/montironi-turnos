@@ -26,7 +26,7 @@ export default async function NuevoVehiculoPage({ params }: { params: Promise<{ 
           <span className="mb-1 block font-medium">Color</span>
           <input name="color" className="w-full rounded-lg border px-3 py-2" />
         </label>
-        <button type="submit" className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white">
+        <button type="submit" className="btn-primary-lg">
           Guardar
         </button>
       </form>

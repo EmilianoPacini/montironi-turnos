@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Montironi Turnos de postventa",
-  description: "Agenda compartida de turnos para taller automotor",
+  title: "Cima AI — Montironi",
+  description: "Panel de agenda y CRM para taller automotor",
 };
 
 export default function RootLayout({
