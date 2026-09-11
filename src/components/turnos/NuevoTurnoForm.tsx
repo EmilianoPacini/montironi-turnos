@@ -6,6 +6,7 @@ import { createTurnoAction, createClienteInlineAction, createVehiculoInlineActio
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
 import { VehiculoFields } from "@/components/clientes/VehiculoFields";
+import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
 
 interface ClienteOption {
   id: string;
@@ -286,9 +287,7 @@ export function NuevoTurnoForm({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={handleInlineCliente} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
             <h3 className="font-semibold">Nuevo cliente</h3>
-            <label className="block text-sm"><span className="mb-1 block">Nombre *</span><input name="nombre" required className="w-full rounded border px-3 py-2" /></label>
-            <label className="block text-sm"><span className="mb-1 block">Apellido *</span><input name="apellido" required className="w-full rounded border px-3 py-2" /></label>
-            <label className="block text-sm"><span className="mb-1 block">Teléfono E.164 *</span><input name="telefono" required placeholder="+5491112345678" className="w-full rounded border px-3 py-2" /></label>
+            <ClienteCoreFields className="w-full rounded border px-3 py-2" />
             <div className="flex gap-2 pt-2">
               <button type="submit" disabled={clientePending} className="btn-primary">Guardar</button>
               <button type="button" onClick={() => setShowClienteModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>

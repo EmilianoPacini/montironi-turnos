@@ -1,4 +1,5 @@
 import { saveClienteAction } from "@/lib/modules/appointments/actions";
+import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
 
 export function ClienteForm({
   cliente,
@@ -18,41 +19,7 @@ export function ClienteForm({
   return (
     <form action={saveClienteAction} className="mt-6 max-w-lg space-y-4">
       {cliente ? <input type="hidden" name="id" value={cliente.id} /> : null}
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">
-          Nombre <span className="text-red-600" aria-hidden="true">*</span>
-        </span>
-        <input
-          name="nombre"
-          required
-          defaultValue={cliente?.nombre}
-          className="w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">
-          Apellido <span className="text-red-600" aria-hidden="true">*</span>
-        </span>
-        <input
-          name="apellido"
-          required={isNew}
-          defaultValue={cliente?.apellido ?? ""}
-          className="w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">
-          Teléfono <span className="text-red-600" aria-hidden="true">*</span>
-        </span>
-        <input
-          name="telefono"
-          type="tel"
-          required={isNew}
-          placeholder="+5491112345678"
-          defaultValue={cliente?.telefono ?? ""}
-          className="w-full rounded-lg border px-3 py-2"
-        />
-      </label>
+      <ClienteCoreFields cliente={cliente} required={isNew} />
       <label className="block text-sm">
         <span className="mb-1 block font-medium">
           Documento <span className="text-red-600" aria-hidden="true">*</span>
