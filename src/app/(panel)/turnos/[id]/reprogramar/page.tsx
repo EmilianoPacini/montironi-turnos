@@ -8,6 +8,7 @@ import { getAvailabilityForDate } from "@/lib/modules/availability/service";
 import { rescheduleTurnoAction } from "@/lib/modules/appointments/actions";
 import { isActiveEstado } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
+import { AvailabilitySlotsPanel } from "@/components/turnos/AvailabilitySlotsPanel";
 
 export default async function ReprogramarPage({
   params,
@@ -91,17 +92,12 @@ export default async function ReprogramarPage({
         </button>
       </form>
 
-      <div className="mt-8 max-w-xl">
-        <h2 className="mb-3 font-semibold">Slots disponibles</h2>
-        {availability.map((b) => (
-          <div key={b.bahiaId} className="mb-3 rounded-lg border bg-white p-3">
-            <p className="font-medium">{b.bahiaNombre}</p>
-            <p className="text-sm text-slate-600">
-              {b.slots.map((s) => format(s.inicio, "HH:mm")).join(" · ") || "Sin disponibilidad"}
-            </p>
-          </div>
-        ))}
-      </div>
+      <AvailabilitySlotsPanel
+        availability={availability}
+        title="Slots disponibles"
+        variant="compact"
+        emptySlotsLabel="Sin disponibilidad"
+      />
     </div>
   );
 }

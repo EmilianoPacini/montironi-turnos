@@ -4,6 +4,7 @@ import { listTalleres, serviciosForTaller } from "@/lib/modules/catalog/service"
 import { listClientes } from "@/lib/modules/customers/service";
 import { getAvailabilityForDate, getCompatibleBahias } from "@/lib/modules/availability/service";
 import { NuevoTurnoForm } from "@/components/turnos/NuevoTurnoForm";
+import { AvailabilitySlotsPanel } from "@/components/turnos/AvailabilitySlotsPanel";
 import { mapServicioForClient } from "@/lib/serialize-for-client";
 import { format, parseISO, startOfDay } from "date-fns";
 
@@ -36,6 +37,17 @@ export default async function NuevoTurnoPage({
     servicios.map((s) => s.id)
   );
 
+  const servicioIds = servicios.slice(0, 1).map((s) => s.id);
+  const availability =
+    servicioIds.length > 0
+      ? await getAvailabilityForDate({
+          empresaId: session.empresaId,
+          tallerId,
+          date,
+          servicioIds,
+        })
+      : [];
+
   return (
     <div className="p-6 lg:p-8">
       <Link href="/agenda" className="text-sm text-slate-600 hover:text-slate-900">
@@ -53,56 +65,11 @@ export default async function NuevoTurnoPage({
         error={error}
       />
 
-      <AvailabilityPreview
-        empresaId={session.empresaId}
-        tallerId={tallerId}
-        date={date}
-        servicioIds={servicios.slice(0, 1).map((s) => s.id)}
+      <AvailabilitySlotsPanel
+        availability={availability}
+        title="Disponibilidad hoy (primer servicio)"
+        maxSlotsPerBahia={6}
       />
-    </div>
-  );
-}
-
-async function AvailabilityPreview({
-  empresaId,
-  tallerId,
-  date,
-  servicioIds,
-}: {
-  empresaId: string;
-  tallerId: string;
-  date: Date;
-  servicioIds: string[];
-}) {
-  if (servicioIds.length === 0) return null;
-
-  const availability = await getAvailabilityForDate({
-    empresaId,
-    tallerId,
-    date,
-    servicioIds,
-  });
-
-  return (
-    <div className="mt-8 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-slate-800">
-        Disponibilidad hoy (primer servicio)
-      </h2>
-      <div className="space-y-2 text-sm">
-        {availability.map((b) => (
-          <div key={b.bahiaId}>
-            <p className="font-medium">{b.bahiaNombre}</p>
-            <p className="text-slate-600">
-              {b.slots.length > 0
-                ? b.slots
-                    .slice(0, 6)
-                    .map((s) => format(s.inicio, "HH:mm"))
-                    .join(", ")
-                : "Sin slots libres"}
-            </p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
