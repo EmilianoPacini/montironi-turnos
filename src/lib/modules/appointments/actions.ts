@@ -12,11 +12,16 @@ import {
   transitionTurnoState,
   blockBahia,
   removeBlock,
+  assertNotPastInicio,
 } from "@/lib/modules/appointments/service";
 import { isDomainError } from "@/lib/modules/appointments/errors";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
+import { ClienteValidationError } from "@/lib/modules/customers/validation";
 import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
+import { upsertIntervaloKm } from "@/lib/modules/catalog/intervalo.service";
+import { createBahia, updateBahia } from "@/lib/modules/catalog/bahia.service";
 import { assertAdminRole } from "@/lib/auth/guards";
+import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
 
 function redirectWithError(path: string, message: string): never {
   const sep = path.includes("?") ? "&" : "?";
@@ -29,6 +34,13 @@ function handleFormError(e: unknown, returnPath: string): never {
   }
   if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
   throw e;
+}
+
+function mapClienteError(e: unknown, returnPath: string): never {
+  if (e instanceof ClienteValidationError) {
+    redirectWithError(returnPath, e.message);
+  }
+  handleFormError(e, returnPath);
 }
 
 export async function createTurnoAction(formData: FormData): Promise<void> {
@@ -44,6 +56,10 @@ export async function createTurnoAction(formData: FormData): Promise<void> {
     }
 
     const inicioStr = String(formData.get("inicio"));
+    const kmRaw = String(formData.get("kilometraje") ?? "").trim();
+    const inicio = new Date(inicioStr);
+
+    assertNotPastInicio(inicio);
 
     await createTurno({
       empresaId: session.empresaId,
@@ -52,7 +68,8 @@ export async function createTurnoAction(formData: FormData): Promise<void> {
       clienteId: String(formData.get("clienteId")),
       vehiculoId: String(formData.get("vehiculoId")),
       servicioIds,
-      inicio: new Date(inicioStr),
+      inicio,
+      kilometraje: kmRaw ? Number(kmRaw) : undefined,
       notas: String(formData.get("notas") ?? "") || undefined,
       creadorId: session.userId,
       confirmar: formData.get("confirmar") === "true",
@@ -232,7 +249,55 @@ export async function saveClienteAction(formData: FormData): Promise<void> {
     revalidatePath("/clientes");
     redirect("/clientes");
   } catch (e) {
-    handleFormError(e, returnPath);
+    mapClienteError(e, returnPath);
+  }
+}
+
+export async function createClienteInlineAction(formData: FormData) {
+  try {
+    const session = await requireSession();
+    const cliente = await upsertCliente({
+      empresaId: session.empresaId,
+      nombre: String(formData.get("nombre")),
+      apellido: String(formData.get("apellido")),
+      telefono: String(formData.get("telefono")),
+    });
+    revalidatePath("/clientes");
+    return {
+      cliente: {
+        id: cliente.id,
+        nombre: cliente.nombre,
+        apellido: cliente.apellido,
+        telefono: cliente.telefono,
+        vehiculos: [] as { vehiculoId: string; vehiculo: { patente: string; marca?: string | null } }[],
+      },
+    };
+  } catch (e) {
+    if (e instanceof ClienteValidationError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function createVehiculoInlineAction(formData: FormData) {
+  try {
+    const session = await requireSession();
+    const vehiculo = await upsertVehiculo({
+      empresaId: session.empresaId,
+      clienteId: String(formData.get("clienteId")),
+      patente: String(formData.get("patente")),
+      marca: String(formData.get("marca") ?? "") || undefined,
+      modelo: String(formData.get("modelo") ?? "") || undefined,
+      tipoVehiculo: (String(formData.get("tipoVehiculo") ?? "auto") as TipoVehiculo),
+      condicion: (String(formData.get("condicion") ?? "normal") as CondicionVehiculo),
+      kilometrajeActual: formData.get("kilometrajeActual")
+        ? Number(formData.get("kilometrajeActual"))
+        : undefined,
+    });
+    revalidatePath("/clientes");
+    return { vehiculo };
+  } catch (e) {
+    if (e instanceof ClienteValidationError) return { error: e.message };
+    throw e;
   }
 }
 
@@ -251,6 +316,11 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
       modelo: String(formData.get("modelo") ?? "") || undefined,
       anio: formData.get("anio") ? Number(formData.get("anio")) : undefined,
       color: String(formData.get("color") ?? "") || undefined,
+      tipoVehiculo: String(formData.get("tipoVehiculo") ?? "auto") as TipoVehiculo,
+      condicion: String(formData.get("condicion") ?? "normal") as CondicionVehiculo,
+      kilometrajeActual: formData.get("kilometrajeActual")
+        ? Number(formData.get("kilometrajeActual"))
+        : undefined,
       clienteId,
     });
     revalidatePath("/clientes");
@@ -303,5 +373,52 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
     redirect("/configuracion");
   } catch (e) {
     handleFormError(e, "/configuracion");
+  }
+}
+
+export async function saveIntervaloAction(formData: FormData): Promise<void> {
+  try {
+    const session = await requireSession();
+    assertAdminRole(session.rol);
+    await upsertIntervaloKm({
+      servicioId: String(formData.get("servicioId")),
+      empresaId: session.empresaId,
+      tipoVehiculo: String(formData.get("tipoVehiculo")) as TipoVehiculo,
+      condicion: String(formData.get("condicion")) as CondicionVehiculo,
+      intervaloKm: Number(formData.get("intervaloKm")),
+    });
+    revalidatePath("/servicios");
+    redirect("/servicios");
+  } catch (e) {
+    handleFormError(e, "/servicios");
+  }
+}
+
+export async function saveBahiaAction(formData: FormData): Promise<void> {
+  try {
+    const session = await requireSession();
+    assertAdminRole(session.rol);
+    const tallerId = String(formData.get("tallerId"));
+    const bahiaId = String(formData.get("bahiaId") ?? "");
+    if (bahiaId) {
+      await updateBahia({
+        bahiaId,
+        empresaId: session.empresaId,
+        nombre: String(formData.get("nombre")),
+        activa: formData.get("activa") === "true",
+        usuarioId: session.userId,
+      });
+    } else {
+      await createBahia({
+        tallerId,
+        empresaId: session.empresaId,
+        nombre: String(formData.get("nombre")),
+        usuarioId: session.userId,
+      });
+    }
+    revalidatePath("/bahias");
+    redirect("/bahias");
+  } catch (e) {
+    handleFormError(e, "/bahias");
   }
 }

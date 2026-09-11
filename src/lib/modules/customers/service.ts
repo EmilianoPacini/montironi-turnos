@@ -1,4 +1,14 @@
 import prisma from "@/lib/db";
+import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
+import { calcularProximoServicioKm } from "@/lib/modules/catalog/intervalo.service";
+import {
+  assertClienteRequiredFields,
+  ClienteValidationError,
+  normalizeTelefonoE164,
+} from "@/lib/modules/customers/validation";
+import { DomainError } from "@/lib/modules/appointments/errors";
+
+export { ClienteValidationError };
 
 export async function listClientes(empresaId: string, search?: string) {
   return prisma.cliente.findMany({
@@ -48,6 +58,99 @@ export async function getCliente(id: string, empresaId: string) {
   });
 }
 
+export async function getClienteByTelefono(telefono: string, empresaId: string) {
+  const normalized = normalizeTelefonoE164(telefono);
+  return prisma.cliente.findFirst({
+    where: { empresaId, telefono: normalized, activo: true },
+  });
+}
+
+/** Contexto completo para agentes IA — id, teléfono, vehículos, turnos, km, próximos servicios. */
+export async function getClienteContext(params: { empresaId: string; id?: string; telefono?: string }) {
+  let cliente;
+  if (params.id) {
+    cliente = await getCliente(params.id, params.empresaId);
+  } else if (params.telefono) {
+    const row = await getClienteByTelefono(params.telefono, params.empresaId);
+    if (row) cliente = await getCliente(row.id, params.empresaId);
+  }
+
+  if (!cliente) return null;
+
+  const vehiculos = await Promise.all(
+    cliente.vehiculos.map(async (cv) => {
+      const v = cv.vehiculo;
+      const ultimoTurno = await prisma.turno.findFirst({
+        where: { vehiculoId: v.id, empresaId: params.empresaId },
+        orderBy: { inicio: "desc" },
+        include: { detalles: { include: { servicio: true } } },
+      });
+
+      const proximosServicios = [];
+      if (v.kilometrajeActual != null && ultimoTurno) {
+        for (const d of ultimoTurno.detalles) {
+          const proximoKm = await calcularProximoServicioKm({
+            servicioId: d.servicioId,
+            tipoVehiculo: v.tipoVehiculo,
+            condicion: v.condicion,
+            kilometrajeActual: v.kilometrajeActual,
+          });
+          if (proximoKm != null) {
+            proximosServicios.push({
+              servicioId: d.servicioId,
+              servicioNombre: d.nombreSnapshot,
+              proximoKm,
+            });
+          }
+        }
+      }
+
+      return {
+        id: v.id,
+        patente: v.patente,
+        marca: v.marca,
+        modelo: v.modelo,
+        anio: v.anio,
+        tipoVehiculo: v.tipoVehiculo,
+        condicion: v.condicion,
+        kilometrajeActual: v.kilometrajeActual,
+        proximosServicios,
+      };
+    })
+  );
+
+  const turnos = await prisma.turno.findMany({
+    where: { clienteId: cliente.id, empresaId: params.empresaId },
+    orderBy: { inicio: "desc" },
+    take: 20,
+    include: {
+      vehiculo: true,
+      detalles: true,
+      bahia: true,
+    },
+  });
+
+  return {
+    id: cliente.id,
+    nombre: cliente.nombre,
+    apellido: cliente.apellido,
+    telefono: cliente.telefono,
+    email: cliente.email,
+    documento: cliente.documento,
+    vehiculos,
+    turnos: turnos.map((t) => ({
+      id: t.id,
+      estado: t.estado,
+      inicio: t.inicio,
+      finalizaEn: t.finalizaEn,
+      kilometraje: t.kilometraje,
+      patente: t.vehiculo.patente,
+      servicios: t.detalles.map((d) => d.nombreSnapshot),
+      bahia: t.bahia.nombre,
+    })),
+  };
+}
+
 export async function upsertCliente(params: {
   empresaId: string;
   id?: string;
@@ -58,15 +161,17 @@ export async function upsertCliente(params: {
   documento?: string;
   notas?: string;
 }) {
+  const { nombre, apellido, telefono } = assertClienteRequiredFields(params);
+
   if (params.id) {
     return prisma.cliente.update({
       where: { id: params.id },
       data: {
-        nombre: params.nombre,
-        apellido: params.apellido,
-        email: params.email,
-        telefono: params.telefono,
-        documento: params.documento,
+        nombre,
+        apellido,
+        email: params.email?.trim() || null,
+        telefono,
+        documento: params.documento?.trim() || null,
         notas: params.notas,
       },
     });
@@ -75,11 +180,11 @@ export async function upsertCliente(params: {
   return prisma.cliente.create({
     data: {
       empresaId: params.empresaId,
-      nombre: params.nombre,
-      apellido: params.apellido,
-      email: params.email,
-      telefono: params.telefono,
-      documento: params.documento,
+      nombre,
+      apellido,
+      email: params.email?.trim() || null,
+      telefono,
+      documento: params.documento?.trim() || null,
       notas: params.notas,
     },
   });
@@ -92,6 +197,9 @@ export async function upsertVehiculo(params: {
   modelo?: string;
   anio?: number;
   color?: string;
+  tipoVehiculo?: TipoVehiculo;
+  condicion?: CondicionVehiculo;
+  kilometrajeActual?: number;
   clienteId?: string;
 }) {
   const vehiculo = await prisma.vehiculo.upsert({
@@ -108,12 +216,20 @@ export async function upsertVehiculo(params: {
       modelo: params.modelo,
       anio: params.anio,
       color: params.color,
+      tipoVehiculo: params.tipoVehiculo ?? TipoVehiculo.auto,
+      condicion: params.condicion ?? CondicionVehiculo.normal,
+      kilometrajeActual: params.kilometrajeActual,
     },
     update: {
       marca: params.marca,
       modelo: params.modelo,
       anio: params.anio,
       color: params.color,
+      ...(params.tipoVehiculo ? { tipoVehiculo: params.tipoVehiculo } : {}),
+      ...(params.condicion ? { condicion: params.condicion } : {}),
+      ...(params.kilometrajeActual !== undefined
+        ? { kilometrajeActual: params.kilometrajeActual }
+        : {}),
     },
   });
 
@@ -149,7 +265,7 @@ export async function linkVehiculoToCliente(
     where: { id: vehiculoId, empresaId },
   });
 
-  if (!cliente || !vehiculo) throw new Error("NOT_FOUND");
+  if (!cliente || !vehiculo) throw new DomainError("No encontrado", "RecursoNoEncontrado");
 
   return prisma.clienteVehiculo.upsert({
     where: { clienteId_vehiculoId: { clienteId, vehiculoId } },

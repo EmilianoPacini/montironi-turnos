@@ -40,18 +40,36 @@ export const VALID_TRANSITIONS: Record<EstadoTurno, EstadoTurno[]> = {
   vencido: [],
 };
 
-export function canTransition(from: EstadoTurno, to: EstadoTurno): boolean {
-  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+export function isActiveEstado(estado: EstadoTurno): boolean {
+  return !isTerminalEstado(estado);
 }
 
-export function isActiveEstado(estado: EstadoTurno): boolean {
-  const terminal: EstadoTurno[] = [
-    EstadoTurno.cancelado,
-    EstadoTurno.ausente,
-    EstadoTurno.vencido,
-    EstadoTurno.finalizado,
-  ];
-  return !terminal.includes(estado);
+/** Estados terminales: no pueden transicionar a estados activos. */
+export function isTerminalEstado(estado: EstadoTurno): boolean {
+  return (
+    [
+      EstadoTurno.cancelado,
+      EstadoTurno.ausente,
+      EstadoTurno.vencido,
+      EstadoTurno.finalizado,
+    ] as EstadoTurno[]
+  ).includes(estado);
+}
+
+/** Estados activos del flujo operativo (excluye pendiente terminal vencido). */
+export const ACTIVE_OPERATIONAL: EstadoTurno[] = [
+  EstadoTurno.pendiente,
+  EstadoTurno.confirmado,
+  EstadoTurno.recibido,
+  EstadoTurno.en_servicio,
+];
+
+export function canTransition(from: EstadoTurno, to: EstadoTurno): boolean {
+  if (isTerminalEstado(from)) return false;
+  if (isTerminalEstado(to)) {
+    return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+  }
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 export function formatPrecioSnapshot(precio: number | string, modo: string): string {

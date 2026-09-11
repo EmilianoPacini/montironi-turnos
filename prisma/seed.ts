@@ -17,6 +17,8 @@ async function main() {
   await prisma.ocupacionBahia.deleteMany();
   await prisma.turno.deleteMany();
   await prisma.operacionApi.deleteMany();
+  await prisma.movimiento.deleteMany();
+  await prisma.servicioIntervaloKm.deleteMany();
   await prisma.documentoCliente.deleteMany();
   await prisma.clienteVehiculo.deleteMany();
   await prisma.franjaHoraria.deleteMany();
@@ -176,6 +178,14 @@ async function main() {
     }),
   ]);
 
+  await prisma.servicioIntervaloKm.createMany({
+    data: [
+      { servicioId: servicios[0].id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
+      { servicioId: servicios[0].id, tipoVehiculo: "camioneta", condicion: "normal", intervaloKm: 8000 },
+      { servicioId: servicios[2].id, tipoVehiculo: "auto", condicion: "normal", intervaloKm: 10000 },
+    ],
+  });
+
   for (const taller of [tallerCentro, tallerNorte]) {
     for (const s of servicios) {
       await prisma.tallerServicio.create({
@@ -193,10 +203,10 @@ async function main() {
   }
 
   const clientesData = [
-    { nombre: "María", apellido: "González", telefono: "+54 11 5555-1001", email: "maria.g@email.com" },
-    { nombre: "Carlos", apellido: "Rodríguez", telefono: "+54 11 5555-1002", email: "carlos.r@email.com" },
-    { nombre: "Laura", apellido: "Fernández", telefono: "+54 11 5555-1003" },
-    { nombre: "Diego", apellido: "López", telefono: "+54 11 5555-1004", email: "diego.l@email.com" },
+    { nombre: "María", apellido: "González", telefono: "+5491155551001", email: "maria.g@email.com" },
+    { nombre: "Carlos", apellido: "Rodríguez", telefono: "+5491155551002", email: "carlos.r@email.com" },
+    { nombre: "Laura", apellido: "Fernández", telefono: "+5491155551003" },
+    { nombre: "Diego", apellido: "López", telefono: "+5491155551004", email: "diego.l@email.com" },
   ];
 
   const clientes = [];
@@ -207,10 +217,10 @@ async function main() {
   }
 
   const vehiculosData = [
-    { patente: "AB123CD", marca: "Toyota", modelo: "Corolla", anio: 2022 },
-    { patente: "AC456EF", marca: "Ford", modelo: "Ranger", anio: 2021 },
-    { patente: "AD789GH", marca: "Volkswagen", modelo: "Amarok", anio: 2023 },
-    { patente: "AE012IJ", marca: "Chevrolet", modelo: "Onix", anio: 2020 },
+    { patente: "AB123CD", marca: "Toyota", modelo: "Corolla", anio: 2022, tipoVehiculo: "auto" as const, condicion: "normal" as const, kilometrajeActual: 45000 },
+    { patente: "AC456EF", marca: "Ford", modelo: "Ranger", anio: 2021, tipoVehiculo: "camioneta" as const, condicion: "normal" as const, kilometrajeActual: 82000 },
+    { patente: "AD789GH", marca: "Volkswagen", modelo: "Amarok", anio: 2023, tipoVehiculo: "camioneta" as const, condicion: "nuevo" as const, kilometrajeActual: 12000 },
+    { patente: "AE012IJ", marca: "Chevrolet", modelo: "Onix", anio: 2020, tipoVehiculo: "auto" as const, condicion: "viejo" as const, kilometrajeActual: 98000 },
   ];
 
   const vehiculos = [];
@@ -284,12 +294,14 @@ async function main() {
         tipo: "turno",
         inicio,
         fin: finalizaEn,
-        activo: ![
-          EstadoTurno.finalizado,
-          EstadoTurno.cancelado,
-          EstadoTurno.ausente,
-          EstadoTurno.vencido,
-        ].includes(spec.estado),
+        activo: !(
+          [
+            EstadoTurno.finalizado,
+            EstadoTurno.cancelado,
+            EstadoTurno.ausente,
+            EstadoTurno.vencido,
+          ] as EstadoTurno[]
+        ).includes(spec.estado),
       },
     });
   }

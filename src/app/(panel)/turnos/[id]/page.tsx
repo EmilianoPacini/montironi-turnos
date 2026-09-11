@@ -11,7 +11,8 @@ import {
   canTransition,
   formatPrecioSnapshot,
 } from "@/lib/modules/appointments/constants";
-import { TurnoActions } from "@/components/turnos/TurnoActions";
+import { TurnoStateDropdown } from "@/components/turnos/TurnoStateDropdown";
+import { calcularProximoServicioKm } from "@/lib/modules/catalog/intervalo.service";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function TurnoDetailPage({
@@ -28,6 +29,20 @@ export default async function TurnoDetailPage({
 
   const transiciones = VALID_TRANSITIONS[turno.estado].filter(
     (t) => t !== EstadoTurno.cancelado
+  );
+
+  const proximosKm = await Promise.all(
+    turno.detalles.map(async (d) => {
+      const km = turno.vehiculo.kilometrajeActual ?? turno.kilometraje;
+      if (km == null) return null;
+      const proximo = await calcularProximoServicioKm({
+        servicioId: d.servicioId,
+        tipoVehiculo: turno.vehiculo.tipoVehiculo,
+        condicion: turno.vehiculo.condicion,
+        kilometrajeActual: km,
+      });
+      return proximo != null ? { servicio: d.nombreSnapshot, proximoKm: proximo } : null;
+    })
   );
 
   return (
@@ -47,11 +62,10 @@ export default async function TurnoDetailPage({
             {format(turno.inicio, "HH:mm")} – {format(turno.finalizaEn, "HH:mm")}
           </p>
         </div>
-        <TurnoActions
+        <TurnoStateDropdown
           turnoId={turno.id}
           version={turno.version}
           estado={turno.estado}
-          transiciones={transiciones}
         />
       </div>
 
@@ -73,8 +87,24 @@ export default async function TurnoDetailPage({
               <dt className="text-slate-500">Vehículo</dt>
               <dd>
                 {turno.vehiculo.patente} · {turno.vehiculo.marca} {turno.vehiculo.modelo}
+                <span className="text-slate-500">
+                  {" "}
+                  ({turno.vehiculo.tipoVehiculo}/{turno.vehiculo.condicion})
+                </span>
               </dd>
             </div>
+            {turno.kilometraje != null ? (
+              <div>
+                <dt className="text-slate-500">Km al turno</dt>
+                <dd>{turno.kilometraje.toLocaleString("es-AR")} km</dd>
+              </div>
+            ) : null}
+            {turno.vehiculo.kilometrajeActual != null ? (
+              <div>
+                <dt className="text-slate-500">Km actual vehículo</dt>
+                <dd>{turno.vehiculo.kilometrajeActual.toLocaleString("es-AR")} km</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-slate-500">Bahía</dt>
               <dd>{turno.bahia.nombre} · {turno.taller.nombre}</dd>
@@ -107,6 +137,18 @@ export default async function TurnoDetailPage({
               </li>
             ))}
           </ul>
+          {proximosKm.filter(Boolean).length > 0 ? (
+            <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+              <p className="font-medium">Próximo servicio por km</p>
+              <ul className="mt-1 space-y-1">
+                {proximosKm.filter(Boolean).map((p) => (
+                  <li key={p!.servicio}>
+                    {p!.servicio}: {p!.proximoKm.toLocaleString("es-AR")} km
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {turno.notas ? (
             <p className="mt-4 text-sm text-slate-600">
               <span className="font-medium">Notas:</span> {turno.notas}

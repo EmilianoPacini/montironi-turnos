@@ -4,10 +4,12 @@ export type DomainErrorCode =
   | "VersionConflicto"
   | "BahiaIncompatible"
   | "FueraDeHorario"
+  | "HorarioVencido"
   | "BloqueoInvalido"
   | "TurnoNoReprogramable"
   | "RecursoNoEncontrado"
-  | "IdempotencyReplay";
+  | "IdempotencyReplay"
+  | "ValidacionCliente";
 
 export class DomainError extends Error {
   constructor(
@@ -34,6 +36,8 @@ export function httpStatusForDomainError(code: DomainErrorCode): number {
       return 409;
     case "TransicionInvalida":
     case "TurnoNoReprogramable":
+    case "ValidacionCliente":
+    case "HorarioVencido":
       return 422;
     case "IdempotencyReplay":
       return 200;

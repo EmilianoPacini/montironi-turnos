@@ -12,6 +12,8 @@ export {
   removeBlock as liberarBloqueoBahia,
   getTurnoById,
   listTurnos,
+  assertNotPastInicio,
+  PAST_SLOT_MESSAGE,
 } from "@/lib/modules/appointments/service";
 
 export { getAgendaForDate } from "@/lib/modules/availability/service";

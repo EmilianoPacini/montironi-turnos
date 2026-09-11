@@ -11,6 +11,15 @@ import { canTransition, isActiveEstado } from "@/lib/modules/appointments/consta
 import { shouldLiberateOcupacion } from "@/lib/modules/agenda/domain/policies";
 import { turnoRepository } from "@/lib/modules/agenda/infrastructure/turno.repository";
 import { AppointmentError, DomainError } from "@/lib/modules/appointments/errors";
+import { registrarMovimiento } from "@/lib/modules/audit/movimiento.service";
+
+export const PAST_SLOT_MESSAGE = "No se permiten asignar turnos para horarios vencidos";
+
+export function assertNotPastInicio(inicio: Date, now: Date = new Date()) {
+  if (inicio < now) {
+    throw new DomainError(PAST_SLOT_MESSAGE, "HorarioVencido");
+  }
+}
 
 export { AppointmentError, DomainError, isDomainError, httpStatusForDomainError } from "@/lib/modules/appointments/errors";
 
@@ -26,6 +35,7 @@ export interface CreateTurnoInput {
   notas?: string;
   creadorId?: string;
   confirmar?: boolean;
+  kilometraje?: number;
 }
 
 export async function resolveBahiaAssignment(params: {
@@ -182,6 +192,7 @@ export async function createTurno(input: CreateTurnoInput) {
           estado,
           inicio: input.inicio,
           finalizaEn,
+          kilometraje: input.kilometraje,
           notas: input.notas,
           detalles: {
             create: servicios.map((s, i) => ({
@@ -215,6 +226,18 @@ export async function createTurno(input: CreateTurnoInput) {
         inicio: input.inicio,
         fin: finalizaEn,
       });
+
+      await registrarMovimiento(
+        {
+          empresaId: input.empresaId,
+          entidad: "turno",
+          entidadId: turno.id,
+          accion: input.confirmar ? "crear_confirmado" : "crear_pendiente",
+          detalle: { inicio: input.inicio.toISOString(), bahiaId, estado },
+          usuarioId: input.creadorId,
+        },
+        tx
+      );
 
       return turno;
     });
@@ -337,6 +360,7 @@ export async function confirmTurno(params: {
       usuarioId: params.usuarioId,
       detalle: "Turno confirmado",
       tx,
+      empresaId: params.empresaId,
     });
   });
 }
@@ -369,6 +393,7 @@ export async function rescheduleTurno(params: {
 
   try {
     await assertWithinSchedule(turno.tallerId, params.inicio, finalizaEn);
+    assertNotPastInicio(params.inicio);
   } catch (e) {
     if (e instanceof DomainError) {
       throw new DomainError(
@@ -472,13 +497,27 @@ export async function cancelTurno(params: {
   return prisma.$transaction(async (tx) => {
     await liberateOcupacionTurno(tx, turno.id);
 
-    return transitionTurno({
+    const result = await transitionTurno({
       turno,
       nuevoEstado: EstadoTurno.cancelado,
       usuarioId: params.usuarioId,
       detalle: params.motivo ?? "Turno cancelado",
       tx,
     });
+
+    await registrarMovimiento(
+      {
+        empresaId: params.empresaId,
+        entidad: "turno",
+        entidadId: turno.id,
+        accion: "cancelar",
+        detalle: { motivo: params.motivo, estadoPrev: turno.estado },
+        usuarioId: params.usuarioId,
+      },
+      tx
+    );
+
+    return result;
   });
 }
 
@@ -518,13 +557,21 @@ export async function transitionTurnoState(params: {
   if (shouldLiberateOcupacion(params.nuevoEstado)) {
     return prisma.$transaction(async (tx) => {
       await liberateOcupacionTurno(tx, turno.id);
-      return transitionTurno({
+      const result = await transitionTurno({
         turno,
         nuevoEstado: params.nuevoEstado,
         usuarioId: params.usuarioId,
         detalle: params.detalle,
         tx,
+        empresaId: params.empresaId,
       });
+      if (params.nuevoEstado === EstadoTurno.finalizado && turno.kilometraje != null) {
+        await tx.vehiculo.update({
+          where: { id: turno.vehiculoId },
+          data: { kilometrajeActual: turno.kilometraje },
+        });
+      }
+      return result;
     });
   }
 
@@ -533,14 +580,22 @@ export async function transitionTurnoState(params: {
     nuevoEstado: params.nuevoEstado,
     usuarioId: params.usuarioId,
     detalle: params.detalle,
+    empresaId: params.empresaId,
   });
 }
 
 async function transitionTurno(params: {
-  turno: { id: string; estado: EstadoTurno; version: number };
+  turno: {
+    id: string;
+    estado: EstadoTurno;
+    version: number;
+    vehiculoId?: string;
+    kilometraje?: number | null;
+  };
   nuevoEstado: EstadoTurno;
   usuarioId?: string;
   detalle?: string;
+  empresaId?: string;
   tx?: Prisma.TransactionClient;
 }) {
   const db = params.tx ?? prisma;
@@ -566,6 +621,24 @@ async function transitionTurno(params: {
       detalle: params.detalle,
     },
   });
+
+  if (params.empresaId) {
+    await registrarMovimiento(
+      {
+        empresaId: params.empresaId,
+        entidad: "turno",
+        entidadId: params.turno.id,
+        accion: "transicion",
+        detalle: {
+          estadoPrev: params.turno.estado,
+          estadoNuevo: params.nuevoEstado,
+          detalle: params.detalle,
+        },
+        usuarioId: params.usuarioId,
+      },
+      params.tx
+    );
+  }
 
   return db.turno.findFirstOrThrow({
     where: { id: params.turno.id },

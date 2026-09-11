@@ -68,10 +68,18 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
   }
 
   const cliente = await prisma.cliente.create({
-    data: { empresaId: empresa.id, nombre: "Test Cliente" },
+    data: {
+      empresaId: empresa.id,
+      nombre: "Test",
+      apellido: "Cliente",
+      telefono: `+54911${suffix.slice(-8).padStart(8, "0")}`,
+    },
   });
   const vehiculo = await prisma.vehiculo.create({
-    data: { empresaId: empresa.id, patente: `TST${suffix.slice(-4)}` },
+    data: { empresaId: empresa.id, patente: `TST${suffix.slice(-4)}`, kilometrajeActual: 10000 },
+  });
+  await prisma.clienteVehiculo.create({
+    data: { clienteId: cliente.id, vehiculoId: vehiculo.id, esPrincipal: true },
   });
 
   const today = new Date();
@@ -100,6 +108,7 @@ export async function destroyTestFixture(empresaId: string) {
   });
   await prisma.eventoTurno.deleteMany({ where: { turno: { empresaId } } });
   await prisma.detalleTurno.deleteMany({ where: { turno: { empresaId } } });
+  await prisma.movimiento.deleteMany({ where: { empresaId } });
   await prisma.turno.deleteMany({ where: { empresaId } });
   await prisma.empresa.delete({ where: { id: empresaId } });
 }

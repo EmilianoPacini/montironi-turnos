@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
 import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listServicios, listTiposServicio } from "@/lib/modules/catalog/service";
-import { saveServicioAction } from "@/lib/modules/appointments/actions";
+import { saveServicioAction, saveIntervaloAction } from "@/lib/modules/appointments/actions";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 
 export default async function ServiciosPage() {
@@ -99,6 +99,45 @@ export default async function ServiciosPage() {
           className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white"
         >
           Crear servicio
+        </button>
+      </form>
+
+      <form
+        action={saveIntervaloAction}
+        className="mt-8 max-w-lg space-y-4 rounded-xl border bg-slate-50 p-5"
+      >
+        <h2 className="font-semibold">Intervalo km por servicio</h2>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Servicio</span>
+          <select name="servicioId" required className="w-full rounded-lg border px-3 py-2">
+            {servicios.map((s) => (
+              <option key={s.id} value={s.id}>{s.nombre}</option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Tipo vehículo</span>
+            <select name="tipoVehiculo" className="w-full rounded-lg border px-3 py-2">
+              <option value="auto">Auto</option>
+              <option value="camioneta">Camioneta</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Condición</span>
+            <select name="condicion" className="w-full rounded-lg border px-3 py-2">
+              <option value="nuevo">Nuevo</option>
+              <option value="normal">Normal</option>
+              <option value="viejo">Viejo</option>
+            </select>
+          </label>
+        </div>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Intervalo (km)</span>
+          <input name="intervaloKm" type="number" required min={1} defaultValue={10000} className="w-full rounded-lg border px-3 py-2" />
+        </label>
+        <button type="submit" className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white">
+          Guardar intervalo
         </button>
       </form>
     </div>

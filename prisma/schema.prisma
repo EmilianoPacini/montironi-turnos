@@ -83,6 +83,21 @@ enum ModoPrecio {
   @@map("modo_precio")
 }
 
+enum TipoVehiculo {
+  auto
+  camioneta
+
+  @@map("tipo_vehiculo")
+}
+
+enum CondicionVehiculo {
+  nuevo
+  normal
+  viejo
+
+  @@map("condicion_vehiculo")
+}
+
 model Empresa {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre    String
@@ -99,6 +114,7 @@ model Empresa {
   vehiculos      Vehiculo[]
   turnos         Turno[]
   operacionesApi OperacionApi[]
+  movimientos    Movimiento[]
 
   @@map("empresa")
 }
@@ -118,6 +134,7 @@ model Usuario {
   turnosCreados Turno[]       @relation("TurnoCreador")
   eventosTurno  EventoTurno[]
   bloqueosCreados OcupacionBahia[] @relation("BloqueoCreador")
+  movimientos   Movimiento[]
 
   @@unique([empresaId, email])
   @@map("usuario")
@@ -190,8 +207,9 @@ model Servicio {
   empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   tipoServicio    TipoServicio     @relation(fields: [tipoServicioId], references: [id])
   tallerServicios TallerServicio[]
-  bahiaServicios  BahiaServicio[]
+  bahiaServicios BahiaServicio[]
   detallesTurno   DetalleTurno[]
+  intervalosKm    ServicioIntervaloKm[]
 
   @@map("servicio")
 }
@@ -275,9 +293,9 @@ model Cliente {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   empresaId String   @map("empresa_id") @db.Uuid
   nombre    String
-  apellido  String?
+  apellido  String
   email     String?
-  telefono  String?
+  telefono  String
   documento String?
   notas     String?
   activo    Boolean  @default(true)
@@ -289,19 +307,23 @@ model Cliente {
   documentos DocumentoCliente[]
   turnos     Turno[]
 
+  @@index([empresaId, telefono])
   @@map("cliente")
 }
 
 model Vehiculo {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  empresaId String   @map("empresa_id") @db.Uuid
-  patente   String
-  marca     String?
-  modelo    String?
-  anio      Int?
-  color     String?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String             @map("empresa_id") @db.Uuid
+  patente           String
+  marca             String?
+  modelo            String?
+  anio              Int?
+  color             String?
+  tipoVehiculo      TipoVehiculo       @default(auto) @map("tipo_vehiculo")
+  condicion         CondicionVehiculo  @default(normal)
+  kilometrajeActual Int?               @map("kilometraje_actual")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   empresa  Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   clientes ClienteVehiculo[]
@@ -309,6 +331,19 @@ model Vehiculo {
 
   @@unique([empresaId, patente])
   @@map("vehiculo")
+}
+
+model ServicioIntervaloKm {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  servicioId   String            @map("servicio_id") @db.Uuid
+  tipoVehiculo TipoVehiculo      @map("tipo_vehiculo")
+  condicion    CondicionVehiculo
+  intervaloKm  Int               @map("intervalo_km")
+
+  servicio Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  @@unique([servicioId, tipoVehiculo, condicion])
+  @@map("servicio_intervalo_km")
 }
 
 model ClienteVehiculo {
@@ -349,6 +384,7 @@ model Turno {
   canal       CanalTurno  @default(interno)
   inicio      DateTime    @db.Timestamptz(6)
   finalizaEn  DateTime    @map("finaliza_en") @db.Timestamptz(6)
+  kilometraje Int?        @map("kilometraje")
   notas       String?
   version     Int         @default(1)
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -433,4 +469,22 @@ model OperacionApi {
 
   @@unique([empresaId, idempotencyKey])
   @@map("operacion_api")
+}
+
+model Movimiento {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  entidad   String
+  entidadId String   @map("entidad_id") @db.Uuid
+  accion    String
+  detalle   Json?
+  usuarioId String?  @map("usuario_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, createdAt(sort: Desc)])
+  @@index([entidad, entidadId])
+  @@map("movimiento")
 }

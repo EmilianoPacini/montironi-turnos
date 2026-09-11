@@ -6,6 +6,8 @@ const adminLinks = [
   { href: "/agenda", label: "Agenda" },
   { href: "/clientes", label: "Clientes" },
   { href: "/servicios", label: "Servicios" },
+  { href: "/bahias", label: "Bahías" },
+  { href: "/movimientos", label: "Movimientos" },
   { href: "/configuracion", label: "Configuración" },
   { href: "/usuarios", label: "Usuarios" },
 ];

@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
       const empresaSlug = request.headers.get("x-empresa") ?? "montironi";
       const { getEmpresaBySlug } = await import("@/lib/modules/agents-api/idempotency");
       const empresa = await getEmpresaBySlug(empresaSlug);
+      if (!empresa) {
+        return Response.json({ error: "Empresa no encontrada", code: "RecursoNoEncontrado" }, { status: 404 });
+      }
       const count = await expirePendingTurnos(empresa.id);
       return Response.json({ vencidos: count, empresa: empresaSlug });
     }

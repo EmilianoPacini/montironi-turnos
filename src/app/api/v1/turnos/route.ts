@@ -4,6 +4,7 @@ import { CanalTurno } from "@prisma/client";
 import {
   crearTurnoPendiente,
   createTurno,
+  assertNotPastInicio,
 } from "@/lib/modules/agenda/application";
 import { withIdempotency } from "@/lib/modules/agenda/infrastructure/operacion-api.repository";
 import {
@@ -20,6 +21,7 @@ interface CreateTurnoBody {
   servicioIds: string[];
   inicio: string;
   canal?: CanalTurno;
+  kilometraje?: number;
   notas?: string;
   confirmar?: boolean;
 }
@@ -31,6 +33,8 @@ export async function POST(request: NextRequest) {
     const key = idempotencyKey(request);
 
     const handler = async () => {
+      const inicio = new Date(body.inicio);
+      assertNotPastInicio(inicio);
       const input = {
         empresaId: session.empresaId,
         tallerId: body.tallerId,
@@ -38,8 +42,9 @@ export async function POST(request: NextRequest) {
         clienteId: body.clienteId,
         vehiculoId: body.vehiculoId,
         servicioIds: body.servicioIds,
-        inicio: new Date(body.inicio),
+        inicio,
         canal: body.canal ?? CanalTurno.interno,
+        kilometraje: body.kilometraje,
         notas: body.notas,
         creadorId: session.userId,
       };

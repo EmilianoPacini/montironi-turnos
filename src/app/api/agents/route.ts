@@ -7,10 +7,12 @@ import {
   getTurnoById,
   cancelTurno,
   rescheduleTurno,
+  assertNotPastInicio,
   isDomainError,
   httpStatusForDomainError,
 } from "@/lib/modules/appointments/service";
-import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
+import { upsertCliente, upsertVehiculo, getClienteContext } from "@/lib/modules/customers/service";
+import { ClienteValidationError } from "@/lib/modules/customers/validation";
 import { CanalTurno } from "@prisma/client";
 
 function unauthorized() {
@@ -88,11 +90,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ turno });
     }
 
+    if (resource === "cliente") {
+      const id = searchParams.get("id");
+      const telefono = searchParams.get("telefono");
+      if (!id && !telefono) {
+        return NextResponse.json({ error: "id o telefono requerido" }, { status: 400 });
+      }
+      try {
+        const cliente = await getClienteContext({
+          empresaId: empresa.id,
+          id: id ?? undefined,
+          telefono: telefono ?? undefined,
+        });
+        if (!cliente) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+        return NextResponse.json({ cliente });
+      } catch (e) {
+        if (e instanceof ClienteValidationError) {
+          return NextResponse.json({ error: e.message, code: "ValidacionCliente" }, { status: 422 });
+        }
+        throw e;
+      }
+    }
+
     return NextResponse.json({
       endpoints: [
         "GET ?resource=servicios",
         "GET ?resource=disponibilidad&tallerId=&fecha=&servicioId=",
         "GET ?resource=turno&id=",
+        "GET ?resource=cliente&id= | telefono=",
         "POST turnos, clientes, vehiculos",
       ],
     });
@@ -114,6 +139,8 @@ export async function POST(request: NextRequest) {
     const handler = async () => {
       switch (action) {
         case "crear_turno": {
+          const inicio = new Date(body.inicio);
+          assertNotPastInicio(inicio);
           const turno = await createTurno({
             empresaId: empresa.id,
             tallerId: body.tallerId,
@@ -121,7 +148,7 @@ export async function POST(request: NextRequest) {
             clienteId: body.clienteId,
             vehiculoId: body.vehiculoId,
             servicioIds: body.servicioIds,
-            inicio: new Date(body.inicio),
+            inicio,
             canal: resolveCanal(body),
             notas: body.notas,
             confirmar: body.confirmar ?? true,
@@ -157,7 +184,7 @@ export async function POST(request: NextRequest) {
             telefono: body.telefono,
             documento: body.documento,
           });
-          return { cliente };
+          return { cliente: { id: cliente.id, nombre: cliente.nombre, apellido: cliente.apellido, telefono: cliente.telefono } };
         }
         case "upsert_vehiculo": {
           const vehiculo = await upsertVehiculo({
@@ -167,6 +194,9 @@ export async function POST(request: NextRequest) {
             modelo: body.modelo,
             anio: body.anio,
             color: body.color,
+            tipoVehiculo: body.tipoVehiculo,
+            condicion: body.condicion,
+            kilometrajeActual: body.kilometrajeActual,
             clienteId: body.clienteId,
           });
           return { vehiculo };

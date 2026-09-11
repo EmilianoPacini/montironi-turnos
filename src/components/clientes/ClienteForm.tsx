@@ -48,6 +48,7 @@ export function ClienteForm({
           name="telefono"
           type="tel"
           required={isNew}
+          placeholder="+5491112345678"
           defaultValue={cliente?.telefono ?? ""}
           className="w-full rounded-lg border px-3 py-2"
         />

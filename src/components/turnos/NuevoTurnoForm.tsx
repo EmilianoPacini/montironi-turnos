@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { createTurnoAction } from "@/lib/modules/appointments/actions";
+import { createTurnoAction, createClienteInlineAction, createVehiculoInlineAction } from "@/lib/modules/appointments/actions";
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
+import { VehiculoFields } from "@/components/clientes/VehiculoFields";
 
 interface ClienteOption {
   id: string;
   nombre: string;
-  apellido?: string | null;
-  telefono?: string | null;
+  apellido: string;
+  telefono: string;
   vehiculos: { vehiculoId: string; vehiculo: { patente: string; marca?: string | null } }[];
 }
 
@@ -28,7 +29,7 @@ interface BahiaOption {
 
 export function NuevoTurnoForm({
   tallerId,
-  clientes,
+  clientes: initialClientes,
   servicios,
   compatibleBahias,
   defaultBahiaId,
@@ -43,9 +44,20 @@ export function NuevoTurnoForm({
   defaultInicio?: string;
   error?: string;
 }) {
+  const [clientes, setClientes] = useState(initialClientes);
   const [clienteId, setClienteId] = useState("");
   const [vehiculoId, setVehiculoId] = useState("");
+  const [fecha, setFecha] = useState(
+    defaultInicio ? format(new Date(defaultInicio), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
+  );
+  const [hora, setHora] = useState(
+    defaultInicio ? format(new Date(defaultInicio), "HH:mm") : "09:00"
+  );
   const [formError, setFormError] = useState<string | undefined>(error);
+  const [showClienteModal, setShowClienteModal] = useState(false);
+  const [showVehiculoModal, setShowVehiculoModal] = useState(false);
+  const [clientePending, setClientePending] = useState(false);
+  const [vehiculoPending, setVehiculoPending] = useState(false);
 
   const vehiculos = useMemo(() => {
     const cliente = clientes.find((c) => c.id === clienteId);
@@ -57,138 +69,246 @@ export function NuevoTurnoForm({
     setVehiculoId("");
   }
 
+  async function handleInlineCliente(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setClientePending(true);
+    const fd = new FormData(e.currentTarget);
+    const result = await createClienteInlineAction(fd);
+    setClientePending(false);
+    if ("error" in result) {
+      setFormError(result.error);
+      return;
+    }
+    setClientes((prev) => [...prev, result.cliente]);
+    setClienteId(result.cliente.id);
+    setShowClienteModal(false);
+    setFormError(undefined);
+  }
+
+  async function handleInlineVehiculo(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!clienteId) return;
+    setVehiculoPending(true);
+    const fd = new FormData(e.currentTarget);
+    fd.set("clienteId", clienteId);
+    const result = await createVehiculoInlineAction(fd);
+    setVehiculoPending(false);
+    if ("error" in result) {
+      setFormError(result.error);
+      return;
+    }
+    setClientes((prev) =>
+      prev.map((c) =>
+        c.id === clienteId
+          ? {
+              ...c,
+              vehiculos: [
+                ...c.vehiculos,
+                {
+                  vehiculoId: result.vehiculo.id,
+                  vehiculo: { patente: result.vehiculo.patente, marca: result.vehiculo.marca },
+                },
+              ],
+            }
+          : c
+      )
+    );
+    setVehiculoId(result.vehiculo.id);
+    setShowVehiculoModal(false);
+  }
+
   return (
-    <form
-      action={createTurnoAction}
-      className="mt-6 max-w-2xl space-y-4"
-      onSubmit={(e) => {
-        const form = e.currentTarget;
-        const checked = form.querySelectorAll<HTMLInputElement>(
-          'input[name="servicioIds"]:checked'
-        );
-        if (checked.length === 0) {
-          e.preventDefault();
-          setFormError("Seleccioná al menos un servicio");
-        }
-      }}
-    >
-      <FormError message={formError} />
-      <input type="hidden" name="tallerId" value={tallerId} />
-
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Cliente</span>
-        <select
-          name="clienteId"
-          required
-          value={clienteId}
-          onChange={(e) => handleClienteChange(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-        >
-          <option value="">Seleccionar...</option>
-          {clientes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre} {c.apellido ?? ""} · {c.telefono ?? "sin tel"}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Vehículo</span>
-        <select
-          name="vehiculoId"
-          required
-          value={vehiculoId}
-          onChange={(e) => setVehiculoId(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          disabled={!clienteId}
-        >
-          <option value="">
-            {clienteId ? "Seleccionar vehículo..." : "Seleccioná un cliente primero"}
-          </option>
-          {vehiculos.map((cv) => (
-            <option key={cv.vehiculoId} value={cv.vehiculoId}>
-              {cv.vehiculo.patente}
-              {cv.vehiculo.marca ? ` · ${cv.vehiculo.marca}` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium">Servicios</legend>
-        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-          {servicios.map((s) => (
-            <label key={s.id} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="servicioIds" value={s.id} />
-              <span>
-                {s.nombre} ({s.duracionMin} min) ·{" "}
-                {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Bahía</span>
-        <select
-          name="bahiaId"
-          defaultValue={defaultBahiaId ?? ""}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-        >
-          <option value="">
-            Automático — asignar si hay exactamente una bahía compatible libre
-          </option>
-          {compatibleBahias.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nombre} (selección manual)
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-slate-500">
-          Podés elegir una bahía manualmente en cualquier momento. Si dejás automático y hay
-          varias bahías libres, se pedirá selección explícita.
-        </p>
-      </label>
-
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Fecha y hora de inicio</span>
-        <input
-          type="datetime-local"
-          name="inicio"
-          required
-          defaultValue={
-            defaultInicio
-              ? format(new Date(defaultInicio), "yyyy-MM-dd'T'HH:mm")
-              : format(new Date(), "yyyy-MM-dd'T'09:00")
+    <>
+      <form
+        action={createTurnoAction}
+        className="mt-6 max-w-2xl space-y-4"
+        onSubmit={(e) => {
+          const form = e.currentTarget;
+          const checked = form.querySelectorAll<HTMLInputElement>(
+            'input[name="servicioIds"]:checked'
+          );
+          if (checked.length === 0) {
+            e.preventDefault();
+            setFormError("Seleccioná al menos un servicio");
+            return;
           }
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-        />
-      </label>
+          const inicioHidden = form.querySelector<HTMLInputElement>('input[name="inicio"]');
+          if (inicioHidden) {
+            inicioHidden.value = `${fecha}T${hora}:00`;
+          }
+        }}
+      >
+        <FormError message={formError} />
+        <input type="hidden" name="tallerId" value={tallerId} />
+        <input type="hidden" name="inicio" value={`${fecha}T${hora}:00`} />
 
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Notas</span>
-        <textarea
-          name="notas"
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-        />
-      </label>
+        <div className="flex items-end gap-2">
+          <label className="block flex-1 text-sm">
+            <span className="mb-1 block font-medium">Cliente</span>
+            <select
+              name="clienteId"
+              required
+              value={clienteId}
+              onChange={(e) => handleClienteChange(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            >
+              <option value="">Seleccionar...</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} {c.apellido} · {c.telefono}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowClienteModal(true)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            + Cliente
+          </button>
+        </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="confirmar" value="true" />
-        Confirmar inmediatamente (revalida disponibilidad al crear)
-      </label>
+        <div className="flex items-end gap-2">
+          <label className="block flex-1 text-sm">
+            <span className="mb-1 block font-medium">Vehículo</span>
+            <select
+              name="vehiculoId"
+              required
+              value={vehiculoId}
+              onChange={(e) => setVehiculoId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              disabled={!clienteId}
+            >
+              <option value="">
+                {clienteId ? "Seleccionar vehículo..." : "Seleccioná un cliente primero"}
+              </option>
+              {vehiculos.map((cv) => (
+                <option key={cv.vehiculoId} value={cv.vehiculoId}>
+                  {cv.vehiculo.patente}
+                  {cv.vehiculo.marca ? ` · ${cv.vehiculo.marca}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={!clienteId}
+            onClick={() => setShowVehiculoModal(true)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+          >
+            + Vehículo
+          </button>
+        </div>
 
-      <div className="flex gap-3 pt-2">
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Servicios</legend>
+          <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+            {servicios.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="servicioIds" value={s.id} />
+                <span>
+                  {s.nombre} ({s.duracionMin} min) ·{" "}
+                  {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Bahía</span>
+          <select
+            name="bahiaId"
+            defaultValue={defaultBahiaId ?? ""}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          >
+            <option value="">Automático</option>
+            {compatibleBahias.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="block text-sm sm:col-span-1">
+            <span className="mb-1 block font-medium">Fecha</span>
+            <input
+              type="date"
+              required
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm sm:col-span-1">
+            <span className="mb-1 block font-medium">Hora</span>
+            <input
+              type="time"
+              required
+              value={hora}
+              onChange={(e) => setHora(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm sm:col-span-1">
+            <span className="mb-1 block font-medium">Km al turno</span>
+            <input
+              name="kilometraje"
+              type="number"
+              min={0}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+        </div>
+
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Notas</span>
+          <textarea name="notas" rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="confirmar" value="true" />
+          Confirmar inmediatamente
+        </label>
+
         <button
           type="submit"
           className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
         >
           Crear turno
         </button>
-      </div>
-    </form>
+      </form>
+
+      {showClienteModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={handleInlineCliente} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
+            <h3 className="font-semibold">Nuevo cliente</h3>
+            <label className="block text-sm"><span className="mb-1 block">Nombre *</span><input name="nombre" required className="w-full rounded border px-3 py-2" /></label>
+            <label className="block text-sm"><span className="mb-1 block">Apellido *</span><input name="apellido" required className="w-full rounded border px-3 py-2" /></label>
+            <label className="block text-sm"><span className="mb-1 block">Teléfono E.164 *</span><input name="telefono" required placeholder="+5491112345678" className="w-full rounded border px-3 py-2" /></label>
+            <div className="flex gap-2 pt-2">
+              <button type="submit" disabled={clientePending} className="rounded bg-slate-900 px-4 py-2 text-sm text-white">Guardar</button>
+              <button type="button" onClick={() => setShowClienteModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {showVehiculoModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form onSubmit={handleInlineVehiculo} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
+            <h3 className="font-semibold">Nuevo vehículo</h3>
+            <VehiculoFields />
+            <div className="flex gap-2 pt-2">
+              <button type="submit" disabled={vehiculoPending} className="rounded bg-slate-900 px-4 py-2 text-sm text-white">Guardar</button>
+              <button type="button" onClick={() => setShowVehiculoModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </>
   );
 }
