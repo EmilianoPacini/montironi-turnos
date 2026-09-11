@@ -1,9 +1,15 @@
 import { createHash } from "crypto";
 import prisma from "@/lib/db";
+import { DomainError } from "@/lib/modules/appointments/errors";
 
 export function fingerprintRequest(body: unknown): string {
   return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }
+
+export type IdempotencyResult<T> = {
+  value: T;
+  replay: boolean;
+};
 
 export async function withIdempotency<T>(params: {
   empresaId: string;
@@ -11,7 +17,7 @@ export async function withIdempotency<T>(params: {
   operation: string;
   requestBody: unknown;
   handler: () => Promise<T>;
-}): Promise<T> {
+}): Promise<IdempotencyResult<T>> {
   const huella = fingerprintRequest(params.requestBody);
 
   const existing = await prisma.operacionApi.findUnique({
@@ -25,9 +31,15 @@ export async function withIdempotency<T>(params: {
 
   if (existing) {
     if (existing.requestFingerprint !== huella) {
-      throw new Error("IDEMPOTENCY_KEY_REUSED");
+      throw new DomainError(
+        "Clave idempotente reutilizada con distinta solicitud",
+        "CapacidadConflicto"
+      );
     }
-    return existing.respuesta as T;
+    return {
+      value: existing.respuesta as T,
+      replay: true,
+    };
   }
 
   const result = await params.handler();
@@ -42,7 +54,7 @@ export async function withIdempotency<T>(params: {
     },
   });
 
-  return result;
+  return { value: result, replay: false };
 }
 
 export function validateAgentApiKey(request: Request): boolean {

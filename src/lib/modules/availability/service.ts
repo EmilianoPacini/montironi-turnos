@@ -1,7 +1,6 @@
 import {
   addMinutes,
   format,
-  parse,
   setHours,
   setMinutes,
   startOfDay,
@@ -11,6 +10,7 @@ import {
 import { es } from "date-fns/locale";
 import prisma from "@/lib/db";
 import { DiaSemana, TipoExcepcion } from "@prisma/client";
+import { DomainError } from "@/lib/modules/appointments/errors";
 
 const DIA_MAP: Record<number, DiaSemana> = {
   0: DiaSemana.domingo,
@@ -197,6 +197,24 @@ export function slotsFromFreeWindows(
   }
 
   return slots;
+}
+
+export async function assertWithinSchedule(
+  tallerId: string,
+  inicio: Date,
+  fin: Date
+): Promise<void> {
+  const schedule = await getTallerScheduleForDate(tallerId, inicio);
+  if (schedule.length === 0) {
+    throw new DomainError("Taller cerrado en esa fecha", "FueraDeHorario");
+  }
+
+  const fits = schedule.some(
+    (w) => !isBefore(inicio, w.inicio) && !isAfter(fin, w.fin)
+  );
+  if (!fits) {
+    throw new DomainError("Horario fuera del calendario del taller", "FueraDeHorario");
+  }
 }
 
 export async function checkSlotAvailable(

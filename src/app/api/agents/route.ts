@@ -7,7 +7,8 @@ import {
   getTurnoById,
   cancelTurno,
   rescheduleTurno,
-  AppointmentError,
+  isDomainError,
+  httpStatusForDomainError,
 } from "@/lib/modules/appointments/service";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
 import { CanalTurno } from "@prisma/client";
@@ -17,11 +18,11 @@ function unauthorized() {
 }
 
 function errorResponse(e: unknown) {
-  if (e instanceof AppointmentError) {
-    return NextResponse.json({ error: e.message, code: e.code }, { status: 409 });
-  }
-  if (e instanceof Error && e.message === "IDEMPOTENCY_KEY_REUSED") {
-    return NextResponse.json({ error: "Clave idempotente reutilizada con distinta solicitud" }, { status: 422 });
+  if (isDomainError(e)) {
+    return NextResponse.json(
+      { error: e.message, code: e.code },
+      { status: httpStatusForDomainError(e.code) }
+    );
   }
   console.error(e);
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
@@ -176,14 +177,17 @@ export async function POST(request: NextRequest) {
     };
 
     if (idempotencyKey) {
-      const result = await withIdempotency({
+      const { value, replay } = await withIdempotency({
         empresaId: empresa.id,
         idempotencyKey,
         operation: action,
         requestBody: body,
         handler,
       });
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...value,
+        ...(replay ? { idempotencyReplay: true, code: "IdempotencyReplay" } : {}),
+      });
     }
 
     return NextResponse.json(await handler());

@@ -1,22 +1,16 @@
 import { Prisma, EstadoTurno, CanalTurno, TipoOcupacion } from "@prisma/client";
 import prisma from "@/lib/db";
 import {
+  assertWithinSchedule,
   calcularDuracionTotal,
   checkSlotAvailable,
   getCompatibleBahias,
   getMargenMin,
 } from "@/lib/modules/availability/service";
 import { canTransition, isActiveEstado } from "@/lib/modules/appointments/constants";
+import { AppointmentError, DomainError } from "@/lib/modules/appointments/errors";
 
-export class AppointmentError extends Error {
-  constructor(
-    message: string,
-    public code: string
-  ) {
-    super(message);
-    this.name = "AppointmentError";
-  }
-}
+export { AppointmentError, DomainError, isDomainError, httpStatusForDomainError } from "@/lib/modules/appointments/errors";
 
 export interface CreateTurnoInput {
   empresaId: string;
@@ -43,13 +37,12 @@ export async function resolveBahiaAssignment(params: {
   const compatible = await getCompatibleBahias(params.tallerId, params.servicioIds);
 
   if (compatible.length === 0) {
-    throw new AppointmentError("Ninguna bahía compatible con los servicios", "INCOMPATIBLE_BAY");
+    throw new DomainError("Ninguna bahía compatible con los servicios", "BahiaIncompatible");
   }
 
   if (params.bahiaId) {
-    // Manual override always wins when compatible and available.
     if (!compatible.some((b) => b.id === params.bahiaId)) {
-      throw new AppointmentError("Bahía incompatible con los servicios", "INCOMPATIBLE_BAY");
+      throw new DomainError("Bahía incompatible con los servicios", "BahiaIncompatible");
     }
     const available = await checkSlotAvailable(
       params.bahiaId,
@@ -58,7 +51,7 @@ export async function resolveBahiaAssignment(params: {
       params.excludeTurnoId
     );
     if (!available) {
-      throw new AppointmentError("Horario no disponible", "SLOT_UNAVAILABLE");
+      throw new DomainError("Horario no disponible", "CapacidadConflicto");
     }
     return { bahiaId: params.bahiaId, autoAssigned: false };
   }
@@ -73,54 +66,79 @@ export async function resolveBahiaAssignment(params: {
   }
 
   if (availableBahias.length === 0) {
-    throw new AppointmentError("Horario no disponible", "SLOT_UNAVAILABLE");
+    throw new DomainError("Horario no disponible", "CapacidadConflicto");
   }
 
   if (availableBahias.length === 1) {
     return { bahiaId: availableBahias[0].id, autoAssigned: true };
   }
 
-  throw new AppointmentError(
+  throw new DomainError(
     "Seleccioná una bahía — hay varias compatibles disponibles",
-    "BAY_REQUIRED"
+    "BahiaIncompatible"
   );
 }
 
-/** Only automatic transition: pendiente → vencido when start time passes unconfirmed. */
-export async function expirePendingTurnos(empresaId: string): Promise<number> {
-  const now = new Date();
-  const expired = await prisma.turno.findMany({
-    where: {
-      empresaId,
-      estado: EstadoTurno.pendiente,
-      inicio: { lt: now },
+async function insertOcupacionTurno(
+  tx: Prisma.TransactionClient,
+  params: { bahiaId: string; turnoId: string; inicio: Date; fin: Date }
+) {
+  return tx.ocupacionBahia.create({
+    data: {
+      bahiaId: params.bahiaId,
+      turnoId: params.turnoId,
+      tipo: TipoOcupacion.turno,
+      inicio: params.inicio,
+      fin: params.fin,
+      activo: true,
     },
   });
+}
 
-  for (const turno of expired) {
-    await prisma.$transaction(async (tx) => {
-      await tx.ocupacionBahia.updateMany({
-        where: { turnoId: turno.id },
-        data: { activo: false },
-      });
-      await tx.turno.update({
-        where: { id: turno.id },
+async function liberateOcupacionTurno(tx: Prisma.TransactionClient, turnoId: string) {
+  await tx.ocupacionBahia.updateMany({
+    where: { turnoId, activo: true },
+    data: { activo: false },
+  });
+}
+
+async function refreshOcupacionTurno(
+  tx: Prisma.TransactionClient,
+  turno: { id: string; bahiaId: string; inicio: Date; finalizaEn: Date }
+) {
+  const active = await tx.ocupacionBahia.findFirst({
+    where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },
+  });
+
+  if (active) {
+    if (
+      active.inicio.getTime() !== turno.inicio.getTime() ||
+      active.fin.getTime() !== turno.finalizaEn.getTime() ||
+      active.bahiaId !== turno.bahiaId
+    ) {
+      await tx.ocupacionBahia.update({
+        where: { id: active.id },
         data: {
-          estado: EstadoTurno.vencido,
-          version: { increment: 1 },
-          eventos: {
-            create: {
-              estadoPrev: EstadoTurno.pendiente,
-              estadoNuevo: EstadoTurno.vencido,
-              detalle: "Vencido automáticamente — hora de inicio superada sin confirmación",
-            },
-          },
+          bahiaId: turno.bahiaId,
+          inicio: turno.inicio,
+          fin: turno.finalizaEn,
         },
       });
-    });
+    }
+    return;
   }
 
-  return expired.length;
+  await insertOcupacionTurno(tx, {
+    bahiaId: turno.bahiaId,
+    turnoId: turno.id,
+    inicio: turno.inicio,
+    fin: turno.finalizaEn,
+  });
+}
+
+/** CrearTurnoPendiente: reserva capacidad con ocupacion_bahia activa (tipo=turno). */
+export async function crearTurnoPendiente(input: Omit<CreateTurnoInput, "confirmar">) {
+  return createTurno({ ...input, confirmar: false });
 }
 
 export async function createTurno(input: CreateTurnoInput) {
@@ -131,10 +149,12 @@ export async function createTurno(input: CreateTurnoInput) {
   });
 
   if (servicios.length !== input.servicioIds.length) {
-    throw new AppointmentError("Servicios inválidos", "INVALID_SERVICES");
+    throw new DomainError("Servicios inválidos", "RecursoNoEncontrado");
   }
 
   const finalizaEn = new Date(input.inicio.getTime() + duracionMin * 60_000);
+
+  await assertWithinSchedule(input.tallerId, input.inicio, finalizaEn);
 
   const { bahiaId } = await resolveBahiaAssignment({
     tallerId: input.tallerId,
@@ -175,7 +195,7 @@ export async function createTurno(input: CreateTurnoInput) {
             create: {
               estadoNuevo: estado,
               usuarioId: input.creadorId,
-              detalle: "Turno creado",
+              detalle: input.confirmar ? "Turno creado y confirmado" : "Turno pendiente creado",
             },
           },
         },
@@ -187,31 +207,59 @@ export async function createTurno(input: CreateTurnoInput) {
         },
       });
 
-      await tx.ocupacionBahia.create({
-        data: {
-          bahiaId,
-          turnoId: turno.id,
-          tipo: TipoOcupacion.turno,
-          inicio: input.inicio,
-          fin: finalizaEn,
-          activo: true,
-        },
+      await insertOcupacionTurno(tx, {
+        bahiaId,
+        turnoId: turno.id,
+        inicio: input.inicio,
+        fin: finalizaEn,
       });
 
       return turno;
     });
   } catch (e) {
+    if (e instanceof DomainError) throw e;
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
-      throw new AppointmentError("Conflicto de reserva", "CONFLICT");
+      throw new DomainError("Conflicto de reserva", "CapacidadConflicto");
     }
-    if (
-      e instanceof Error &&
-      e.message.includes("ocupacion_bahia_no_overlap")
-    ) {
-      throw new AppointmentError("Conflicto de reserva", "CONFLICT");
+    if (e instanceof Error && e.message.includes("ocupacion_bahia_no_overlap")) {
+      throw new DomainError("Conflicto de reserva", "CapacidadConflicto");
     }
     throw e;
   }
+}
+
+/** Only automatic transition: pendiente → vencido when start time passes unconfirmed. */
+export async function expirePendingTurnos(empresaId: string): Promise<number> {
+  const now = new Date();
+  const expired = await prisma.turno.findMany({
+    where: {
+      empresaId,
+      estado: EstadoTurno.pendiente,
+      inicio: { lt: now },
+    },
+  });
+
+  for (const turno of expired) {
+    await prisma.$transaction(async (tx) => {
+      await liberateOcupacionTurno(tx, turno.id);
+      await tx.turno.update({
+        where: { id: turno.id },
+        data: {
+          estado: EstadoTurno.vencido,
+          version: { increment: 1 },
+          eventos: {
+            create: {
+              estadoPrev: EstadoTurno.pendiente,
+              estadoNuevo: EstadoTurno.vencido,
+              detalle: "Vencido automáticamente — hora de inicio superada sin confirmación",
+            },
+          },
+        },
+      });
+    });
+  }
+
+  return expired.length;
 }
 
 export async function confirmTurno(params: {
@@ -224,13 +272,15 @@ export async function confirmTurno(params: {
     where: { id: params.turnoId, empresaId: params.empresaId },
   });
 
-  if (!turno) throw new AppointmentError("Turno no encontrado", "NOT_FOUND");
+  if (!turno) throw new DomainError("Turno no encontrado", "RecursoNoEncontrado");
   if (params.version !== undefined && turno.version !== params.version) {
-    throw new AppointmentError("El turno fue modificado", "VERSION_CONFLICT");
+    throw new DomainError("El turno fue modificado", "VersionConflicto");
   }
   if (!canTransition(turno.estado, EstadoTurno.confirmado)) {
-    throw new AppointmentError("Transición inválida", "INVALID_TRANSITION");
+    throw new DomainError("Transición inválida", "TransicionInvalida");
   }
+
+  await assertWithinSchedule(turno.tallerId, turno.inicio, turno.finalizaEn);
 
   const available = await checkSlotAvailable(
     turno.bahiaId,
@@ -239,14 +289,18 @@ export async function confirmTurno(params: {
     turno.id
   );
   if (!available) {
-    throw new AppointmentError("Horario ya no disponible", "SLOT_UNAVAILABLE");
+    throw new DomainError("Horario ya no disponible", "CapacidadConflicto");
   }
 
-  return transitionTurno({
-    turno,
-    nuevoEstado: EstadoTurno.confirmado,
-    usuarioId: params.usuarioId,
-    detalle: "Turno confirmado",
+  return prisma.$transaction(async (tx) => {
+    await refreshOcupacionTurno(tx, turno);
+    return transitionTurno({
+      turno,
+      nuevoEstado: EstadoTurno.confirmado,
+      usuarioId: params.usuarioId,
+      detalle: "Turno confirmado",
+      tx,
+    });
   });
 }
 
@@ -263,18 +317,30 @@ export async function rescheduleTurno(params: {
     include: { detalles: true },
   });
 
-  if (!turno) throw new AppointmentError("Turno no encontrado", "NOT_FOUND");
+  if (!turno) throw new DomainError("Turno no encontrado", "RecursoNoEncontrado");
   if (turno.version !== params.version) {
-    throw new AppointmentError("El turno fue modificado", "VERSION_CONFLICT");
+    throw new DomainError("El turno fue modificado", "VersionConflicto");
   }
   if (!isActiveEstado(turno.estado)) {
-    throw new AppointmentError("Turno no modificable", "INVALID_STATE");
+    throw new DomainError("Turno no modificable", "TurnoNoReprogramable");
   }
 
   const margen = await getMargenMin(turno.tallerId);
   const servicioIds = turno.detalles.map((d) => d.servicioId);
   const duracionMin = turno.detalles.reduce((a, d) => a + d.duracionMin, 0) + margen;
   const finalizaEn = new Date(params.inicio.getTime() + duracionMin * 60_000);
+
+  try {
+    await assertWithinSchedule(turno.tallerId, params.inicio, finalizaEn);
+  } catch (e) {
+    if (e instanceof DomainError) {
+      throw new DomainError(
+        "Conflicto al reprogramar — se mantiene el horario anterior",
+        "CapacidadConflicto"
+      );
+    }
+    throw e;
+  }
 
   let resolvedBahiaId: string;
   try {
@@ -287,10 +353,10 @@ export async function rescheduleTurno(params: {
       excludeTurnoId: turno.id,
     }));
   } catch (e) {
-    if (e instanceof AppointmentError) {
-      throw new AppointmentError(
+    if (e instanceof DomainError) {
+      throw new DomainError(
         "Conflicto al reprogramar — se mantiene el horario anterior",
-        "RESCHEDULE_CONFLICT"
+        "CapacidadConflicto"
       );
     }
     throw e;
@@ -298,20 +364,13 @@ export async function rescheduleTurno(params: {
 
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.ocupacionBahia.updateMany({
-        where: { turnoId: turno.id },
-        data: { activo: false },
-      });
+      await liberateOcupacionTurno(tx, turno.id);
 
-      await tx.ocupacionBahia.create({
-        data: {
-          bahiaId: resolvedBahiaId,
-          turnoId: turno.id,
-          tipo: TipoOcupacion.turno,
-          inicio: params.inicio,
-          fin: finalizaEn,
-          activo: true,
-        },
+      await insertOcupacionTurno(tx, {
+        bahiaId: resolvedBahiaId,
+        turnoId: turno.id,
+        inicio: params.inicio,
+        fin: finalizaEn,
       });
 
       return tx.turno.update({
@@ -345,9 +404,9 @@ export async function rescheduleTurno(params: {
       (e.message.includes("ocupacion_bahia_no_overlap") ||
         (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034"))
     ) {
-      throw new AppointmentError(
+      throw new DomainError(
         "Conflicto al reprogramar — se mantiene el horario anterior",
-        "RESCHEDULE_CONFLICT"
+        "CapacidadConflicto"
       );
     }
     throw e;
@@ -365,19 +424,16 @@ export async function cancelTurno(params: {
     where: { id: params.turnoId, empresaId: params.empresaId },
   });
 
-  if (!turno) throw new AppointmentError("Turno no encontrado", "NOT_FOUND");
+  if (!turno) throw new DomainError("Turno no encontrado", "RecursoNoEncontrado");
   if (params.version !== undefined && turno.version !== params.version) {
-    throw new AppointmentError("El turno fue modificado", "VERSION_CONFLICT");
+    throw new DomainError("El turno fue modificado", "VersionConflicto");
   }
   if (!canTransition(turno.estado, EstadoTurno.cancelado)) {
-    throw new AppointmentError("No se puede cancelar", "INVALID_TRANSITION");
+    throw new DomainError("No se puede cancelar", "TransicionInvalida");
   }
 
   return prisma.$transaction(async (tx) => {
-    await tx.ocupacionBahia.updateMany({
-      where: { turnoId: turno.id },
-      data: { activo: false },
-    });
+    await liberateOcupacionTurno(tx, turno.id);
 
     return transitionTurno({
       turno,
@@ -401,15 +457,15 @@ export async function transitionTurnoState(params: {
     where: { id: params.turnoId, empresaId: params.empresaId },
   });
 
-  if (!turno) throw new AppointmentError("Turno no encontrado", "NOT_FOUND");
+  if (!turno) throw new DomainError("Turno no encontrado", "RecursoNoEncontrado");
   if (turno.version !== params.version) {
-    throw new AppointmentError("El turno fue modificado", "VERSION_CONFLICT");
+    throw new DomainError("El turno fue modificado", "VersionConflicto");
   }
   if (params.nuevoEstado === EstadoTurno.vencido) {
-    throw new AppointmentError("Vencido solo se aplica automáticamente", "INVALID_TRANSITION");
+    throw new DomainError("Vencido solo se aplica automáticamente", "TransicionInvalida");
   }
   if (!canTransition(turno.estado, params.nuevoEstado)) {
-    throw new AppointmentError("Transición inválida", "INVALID_TRANSITION");
+    throw new DomainError("Transición inválida", "TransicionInvalida");
   }
 
   if (params.nuevoEstado === EstadoTurno.cancelado) {
@@ -463,6 +519,18 @@ async function transitionTurno(params: {
   });
 }
 
+/** CrearBloqueoBahia: tipo=bloqueo, turno_id NULL, motivo obligatorio, mismo EXCLUDE GiST. */
+export async function crearBloqueoBahia(params: {
+  empresaId: string;
+  bahiaId: string;
+  inicio: Date;
+  fin: Date;
+  motivo: string;
+  usuarioId?: string;
+}) {
+  return blockBahia(params);
+}
+
 export async function blockBahia(params: {
   empresaId: string;
   bahiaId: string;
@@ -473,18 +541,20 @@ export async function blockBahia(params: {
 }) {
   const motivo = params.motivo.trim();
   if (!motivo) {
-    throw new AppointmentError("El motivo es obligatorio para bloqueos", "MOTIVO_REQUIRED");
+    throw new DomainError("El motivo es obligatorio para bloqueos", "BloqueoInvalido");
   }
 
   const bahia = await prisma.bahia.findFirst({
     where: { id: params.bahiaId, taller: { empresaId: params.empresaId } },
   });
 
-  if (!bahia) throw new AppointmentError("Bahía no encontrada", "NOT_FOUND");
+  if (!bahia) throw new DomainError("Bahía no encontrada", "RecursoNoEncontrado");
+
+  await assertWithinSchedule(bahia.tallerId, params.inicio, params.fin);
 
   const available = await checkSlotAvailable(params.bahiaId, params.inicio, params.fin);
   if (!available) {
-    throw new AppointmentError("Horario ocupado", "SLOT_UNAVAILABLE");
+    throw new DomainError("Horario ocupado", "CapacidadConflicto");
   }
 
   try {
@@ -500,11 +570,8 @@ export async function blockBahia(params: {
       },
     });
   } catch (e) {
-    if (
-      e instanceof Error &&
-      e.message.includes("ocupacion_bahia_no_overlap")
-    ) {
-      throw new AppointmentError("Conflicto al bloquear", "CONFLICT");
+    if (e instanceof Error && e.message.includes("ocupacion_bahia_no_overlap")) {
+      throw new DomainError("Conflicto al bloquear", "CapacidadConflicto");
     }
     throw e;
   }
@@ -573,7 +640,7 @@ export async function removeBlock(blockId: string, empresaId: string) {
     },
   });
 
-  if (!block) throw new AppointmentError("Bloqueo no encontrado", "NOT_FOUND");
+  if (!block) throw new DomainError("Bloqueo no encontrado", "RecursoNoEncontrado");
 
   return prisma.ocupacionBahia.update({
     where: { id: blockId },

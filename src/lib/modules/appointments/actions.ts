@@ -12,8 +12,8 @@ import {
   transitionTurnoState,
   blockBahia,
   removeBlock,
-  AppointmentError,
 } from "@/lib/modules/appointments/service";
+import { isDomainError } from "@/lib/modules/appointments/errors";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
 import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
 
@@ -23,7 +23,7 @@ function redirectWithError(path: string, message: string): never {
 }
 
 function handleFormError(e: unknown, returnPath: string): never {
-  if (e instanceof AppointmentError) {
+  if (isDomainError(e)) {
     redirectWithError(returnPath, e.message);
   }
   if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
@@ -77,7 +77,7 @@ export async function confirmTurnoAction(turnoId: string, version: number) {
     revalidatePath(`/turnos/${turnoId}`);
     return { success: true as const };
   } catch (e) {
-    if (e instanceof AppointmentError) return { error: e.message, code: e.code };
+    if (isDomainError(e)) return { error: e.message, code: e.code };
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;
   }
@@ -101,7 +101,7 @@ export async function transitionTurnoAction(
     revalidatePath(`/turnos/${turnoId}`);
     return { success: true as const };
   } catch (e) {
-    if (e instanceof AppointmentError) return { error: e.message, code: e.code };
+    if (isDomainError(e)) return { error: e.message, code: e.code };
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;
   }
@@ -121,7 +121,7 @@ export async function cancelTurnoAction(turnoId: string, version: number, motivo
     revalidatePath(`/turnos/${turnoId}`);
     return { success: true as const };
   } catch (e) {
-    if (e instanceof AppointmentError) return { error: e.message, code: e.code };
+    if (isDomainError(e)) return { error: e.message, code: e.code };
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;
   }
@@ -181,7 +181,7 @@ export async function removeBlockAction(blockId: string) {
     revalidatePath("/agenda");
     return { success: true as const };
   } catch (e) {
-    if (e instanceof AppointmentError) return { error: e.message, code: e.code };
+    if (isDomainError(e)) return { error: e.message, code: e.code };
     throw e;
   }
 }

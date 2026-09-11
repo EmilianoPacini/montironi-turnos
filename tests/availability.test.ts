@@ -1,16 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient, DiaSemana, EstadoTurno } from "@prisma/client";
+import { PrismaClient, DiaSemana, EstadoTurno, TipoOcupacion } from "@prisma/client";
 import {
   checkSlotAvailable,
   getAvailabilityForDate,
 } from "@/lib/modules/availability/service";
 import {
   createTurno,
+  crearTurnoPendiente,
   blockBahia,
+  cancelTurno,
+  confirmTurno,
   expirePendingTurnos,
   resolveBahiaAssignment,
   rescheduleTurno,
-  AppointmentError,
+  DomainError,
 } from "@/lib/modules/appointments/service";
 import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 
@@ -57,12 +60,14 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     });
     bahia3Id = bahia3.id;
 
-    const patron = await prisma.patronHorario.create({
-      data: { tallerId, dia: DiaSemana.lunes },
-    });
-    await prisma.franjaHoraria.create({
-      data: { patronHorarioId: patron.id, horaInicio: "08:00", horaFin: "18:00" },
-    });
+    for (const dia of Object.values(DiaSemana)) {
+      const patron = await prisma.patronHorario.create({
+        data: { tallerId, dia },
+      });
+      await prisma.franjaHoraria.create({
+        data: { patronHorarioId: patron.id, horaInicio: "08:00", horaFin: "20:00" },
+      });
+    }
 
     const tipo = await prisma.tipoServicio.create({
       data: { empresaId, nombre: "Test" },
@@ -140,12 +145,28 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         inicio: overlapStart,
         confirmar: true,
       })
-    ).rejects.toSatisfy((err: unknown) => {
-      return (
-        err instanceof AppointmentError &&
-        (err.code === "CONFLICT" || err.code === "SLOT_UNAVAILABLE")
-      );
+    ).rejects.toMatchObject({ code: "CapacidadConflicto" });
+  });
+
+  it("CrearTurnoPendiente inserta ocupacion_bahia activa tipo turno", async () => {
+    const inicio = addMinutes(slotInicio, 90);
+    const turno = await crearTurnoPendiente({
+      empresaId,
+      tallerId,
+      bahiaId: bahia2Id,
+      clienteId,
+      vehiculoId,
+      servicioIds: [servicioId],
+      inicio,
     });
+
+    expect(turno.estado).toBe(EstadoTurno.pendiente);
+
+    const occ = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },
+    });
+    expect(occ).toBeTruthy();
+    expect(occ?.inicio.getTime()).toBe(inicio.getTime());
   });
 
   it("auto-asigna bahía cuando hay exactamente una compatible disponible", async () => {
@@ -187,10 +208,10 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         inicio: slot,
         fin,
       })
-    ).rejects.toMatchObject({ code: "BAY_REQUIRED" });
+    ).rejects.toMatchObject({ code: "BahiaIncompatible" });
   });
 
-  it("vence pendientes automáticamente al pasar hora de inicio", async () => {
+  it("vence pendientes y libera ocupación", async () => {
     const past = addMinutes(new Date(), -120);
     const turno = await createTurno({
       empresaId,
@@ -209,6 +230,52 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
 
     const updated = await prisma.turno.findUnique({ where: { id: turno.id } });
     expect(updated?.estado).toBe(EstadoTurno.vencido);
+
+    const occ = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true },
+    });
+    expect(occ).toBeNull();
+  });
+
+  it("cancelar libera ocupación activa", async () => {
+    const inicio = addMinutes(slotInicio, 180);
+    const turno = await createTurno({
+      empresaId,
+      tallerId,
+      bahiaId: bahia3Id,
+      clienteId,
+      vehiculoId,
+      servicioIds: [servicioId],
+      inicio,
+      confirmar: true,
+    });
+
+    await cancelTurno({ turnoId: turno.id, empresaId, version: turno.version });
+
+    const occ = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true },
+    });
+    expect(occ).toBeNull();
+  });
+
+  it("confirmar mantiene ocupación activa", async () => {
+    const inicio = addMinutes(slotInicio, 270);
+    const turno = await createTurno({
+      empresaId,
+      tallerId,
+      bahiaId: bahia3Id,
+      clienteId,
+      vehiculoId,
+      servicioIds: [servicioId],
+      inicio,
+    });
+
+    await confirmTurno({ turnoId: turno.id, empresaId, version: turno.version });
+
+    const occ = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },
+    });
+    expect(occ).toBeTruthy();
   });
 
   it("no aplica ausente automáticamente — solo manual", async () => {
@@ -259,7 +326,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         fin: addMinutes(blockStart, 90),
         motivo: "Bloqueo superpuesto",
       })
-    ).rejects.toBeInstanceOf(AppointmentError);
+    ).rejects.toMatchObject({ code: "CapacidadConflicto" });
   });
 
   it("exige motivo en bloqueos de bahía", async () => {
@@ -272,7 +339,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         fin: addMinutes(blockStart, 60),
         motivo: "   ",
       })
-    ).rejects.toMatchObject({ code: "MOTIVO_REQUIRED" });
+    ).rejects.toMatchObject({ code: "BloqueoInvalido" });
   });
 
   it("calcula disponibilidad excluyendo ocupaciones", async () => {
@@ -292,11 +359,11 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
   });
 
   it("reprogramación con conflicto mantiene ocupación anterior", async () => {
-    const originalStart = addMinutes(slotInicio, 540);
+    const originalStart = addMinutes(slotInicio, 420);
     const turno = await createTurno({
       empresaId,
       tallerId,
-      bahiaId,
+      bahiaId: bahia3Id,
       clienteId,
       vehiculoId,
       servicioIds: [servicioId],
@@ -304,10 +371,10 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       confirmar: true,
     });
 
-    const conflictStart = addMinutes(originalStart, 180);
+    const conflictStart = addMinutes(slotInicio, 510);
     await blockBahia({
       empresaId,
-      bahiaId,
+      bahiaId: bahia3Id,
       inicio: conflictStart,
       fin: addMinutes(conflictStart, 75),
       motivo: "Bloqueo para reprogramación",
@@ -320,7 +387,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         inicio: conflictStart,
         version: turno.version,
       })
-    ).rejects.toMatchObject({ code: "RESCHEDULE_CONFLICT" });
+    ).rejects.toMatchObject({ code: "CapacidadConflicto" });
 
     const unchanged = await prisma.turno.findUnique({ where: { id: turno.id } });
     expect(unchanged?.inicio.getTime()).toBe(originalStart.getTime());

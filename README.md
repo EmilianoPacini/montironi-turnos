@@ -83,6 +83,8 @@ Migración única: `prisma/migrations/20260911152000_authoritative_init/migratio
 - `turno.version` para optimistic locking; `operacion_api` UNIQUE `(empresa_id, idempotency_key)`
 - `ocupacion_bahia`: `periodo tstzrange` + `EXCLUDE USING gist (bahia_id WITH =, periodo WITH &&) WHERE (activo)`
 - Bloqueos manuales: `tipo='bloqueo'`, `turno_id` NULL, `motivo` obligatorio, `creado_por_usuario_id` opcional (sin turno ficticio)
+- Turnos pendientes reservan capacidad: `ocupacion_bahia` activa `tipo=turno` al crear; se libera en cancel/vencido; se mantiene al confirmar
+- Errores de dominio tipados: `CapacidadConflicto`, `TransicionInvalida`, `VersionConflicto`, `BahiaIncompatible`, `FueraDeHorario`, `BloqueoInvalido`, `TurnoNoReprogramable`, `RecursoNoEncontrado`, `IdempotencyReplay`
 
 Para resetear desde cero: `npx prisma migrate reset --force`
 
