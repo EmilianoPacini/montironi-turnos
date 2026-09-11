@@ -200,8 +200,8 @@ export async function upsertCliente(params: {
   const { nombre, apellido, telefono } = assertClienteRequiredFields(params);
 
   if (params.id) {
-    return prisma.cliente.update({
-      where: { id: params.id },
+    const updated = await prisma.cliente.updateMany({
+      where: { id: params.id, empresaId: params.empresaId },
       data: {
         nombre,
         apellido,
@@ -210,6 +210,12 @@ export async function upsertCliente(params: {
         documento: params.documento?.trim() || null,
         notas: params.notas,
       },
+    });
+    if (updated.count === 0) {
+      throw new DomainError("Cliente no encontrado", "RecursoNoEncontrado");
+    }
+    return prisma.cliente.findFirstOrThrow({
+      where: { id: params.id, empresaId: params.empresaId },
     });
   }
 
