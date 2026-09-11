@@ -10,6 +10,7 @@ import {
 } from "@/lib/modules/appointments/actions";
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
+import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
 import { VehiculoFields } from "@/components/clientes/VehiculoFields";
 import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
 
@@ -86,6 +87,8 @@ export function NuevoTurnoForm({
   const [notas, setNotas] = useState("");
   const [confirmar, setConfirmar] = useState(false);
   const [inlineError, setInlineError] = useState<string | undefined>();
+  const [localFieldErrors, setLocalFieldErrors] = useState<Partial<Record<string, string>>>({});
+  const [localFocusKey, setLocalFocusKey] = useState<number | undefined>();
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [showVehiculoModal, setShowVehiculoModal] = useState(false);
   const [clientePending, setClientePending] = useState(false);
@@ -104,7 +107,20 @@ export function NuevoTurnoForm({
     setKilometraje(v.kilometraje);
     setNotas(v.notas);
     setConfirmar(v.confirmar);
+    setLocalFieldErrors({});
   }, [state?.formKey]);
+
+  const errorState =
+    state?.formKey != null
+      ? state
+      : Object.keys(localFieldErrors).length > 0
+        ? {
+            formKey: localFocusKey,
+            focusField: Object.keys(localFieldErrors)[0],
+            fieldErrors: localFieldErrors,
+          }
+        : undefined;
+  const { fieldClass, FieldErrorMessage } = useFormFieldErrors(errorState);
 
   const formError = state?.error ?? inlineError;
 
@@ -117,6 +133,7 @@ export function NuevoTurnoForm({
     setClienteId(id);
     setVehiculoId("");
     setInlineError(undefined);
+    setLocalFieldErrors({});
   }
 
   function toggleServicio(id: string, checked: boolean) {
@@ -124,6 +141,12 @@ export function NuevoTurnoForm({
       checked ? [...prev, id] : prev.filter((value) => value !== id)
     );
     setInlineError(undefined);
+    setLocalFieldErrors((prev) => {
+      if (!prev.servicioIds) return prev;
+      const next = { ...prev };
+      delete next.servicioIds;
+      return next;
+    });
   }
 
   async function handleInlineCliente(e: React.FormEvent<HTMLFormElement>) {
@@ -183,10 +206,14 @@ export function NuevoTurnoForm({
         onSubmit={(e) => {
           if (servicioIds.length === 0) {
             e.preventDefault();
-            setInlineError("Seleccioná al menos un servicio");
+            const message = "Seleccioná al menos un servicio";
+            setInlineError(message);
+            setLocalFieldErrors({ servicioIds: message });
+            setLocalFocusKey(Date.now());
             return;
           }
           setInlineError(undefined);
+          setLocalFieldErrors({});
         }}
       >
         <FormError message={formError} />
@@ -203,9 +230,13 @@ export function NuevoTurnoForm({
             <select
               name="clienteId"
               required
+              data-field="clienteId"
               value={clienteId}
               onChange={(e) => handleClienteChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "clienteId",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             >
               <option value="">Seleccionar...</option>
               {clientes.map((c) => (
@@ -230,12 +261,17 @@ export function NuevoTurnoForm({
             <select
               name="vehiculoId"
               required
+              data-field="vehiculoId"
               value={vehiculoId}
               onChange={(e) => {
                 setVehiculoId(e.target.value);
                 setInlineError(undefined);
+                setLocalFieldErrors({});
               }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "vehiculoId",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
               disabled={!clienteId}
             >
               <option value="">
@@ -261,7 +297,14 @@ export function NuevoTurnoForm({
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Servicios</legend>
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+          <div
+            data-field="servicioIds"
+            tabIndex={-1}
+            className={fieldClass(
+              "servicioIds",
+              "space-y-2 rounded-lg border border-slate-200 p-3 outline-none"
+            )}
+          >
             {servicios.map((s) => (
               <label key={s.id} className="flex items-center gap-2 text-sm">
                 <input
@@ -276,15 +319,20 @@ export function NuevoTurnoForm({
               </label>
             ))}
           </div>
+          <FieldErrorMessage field="servicioIds" />
         </fieldset>
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Bahía</span>
           <select
             name="bahiaId"
+            data-field="bahiaId"
             value={bahiaId}
             onChange={(e) => setBahiaId(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className={fieldClass(
+              "bahiaId",
+              "w-full rounded-lg border border-slate-300 px-3 py-2"
+            )}
           >
             <option value="">Automático</option>
             {compatibleBahias.map((b) => (
@@ -293,6 +341,7 @@ export function NuevoTurnoForm({
               </option>
             ))}
           </select>
+          <FieldErrorMessage field="bahiaId" />
         </label>
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -301,20 +350,30 @@ export function NuevoTurnoForm({
             <input
               type="date"
               required
+              data-field="fecha"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "fecha",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             />
+            <FieldErrorMessage field="fecha" />
           </label>
           <label className="block text-sm sm:col-span-1">
             <span className="mb-1 block font-medium">Hora</span>
             <input
               type="time"
               required
+              data-field="hora"
               value={hora}
               onChange={(e) => setHora(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "hora",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             />
+            <FieldErrorMessage field="hora" />
           </label>
           <label className="block text-sm sm:col-span-1">
             <span className="mb-1 block font-medium">Km al turno</span>

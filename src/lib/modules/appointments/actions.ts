@@ -30,6 +30,12 @@ import {
   readStringArray,
   type FormActionState,
 } from "@/lib/form-action-state";
+import {
+  fieldErrorsForClienteValidation,
+  fieldErrorsForTurnoDomainError,
+  fieldErrorsForVehiculoValidation,
+  focusFieldForTurnoDomainError,
+} from "@/lib/form-field-errors";
 
 export type ClienteFormValues = {
   nombre: string;
@@ -132,7 +138,12 @@ export async function createTurnoAction(
     const servicioIds = values.servicioIds;
 
     if (servicioIds.length === 0) {
-      return formActionError("Seleccioná al menos un servicio", values);
+      return formActionError(
+        "Seleccioná al menos un servicio",
+        values,
+        { servicioIds: "Seleccioná al menos un servicio" },
+        "servicioIds"
+      );
     }
 
     const kmRaw = values.kilometraje;
@@ -158,7 +169,13 @@ export async function createTurnoAction(
     redirect("/agenda");
   } catch (e) {
     if (isDomainError(e)) {
-      return formActionError(e.message, values);
+      const fieldErrors = fieldErrorsForTurnoDomainError(e.code, e.message);
+      return formActionError(
+        e.message,
+        values,
+        fieldErrors,
+        focusFieldForTurnoDomainError(e.code)
+      );
     }
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;
@@ -299,13 +316,31 @@ export async function saveClienteAction(
     const { nombre, apellido, telefono, documento, patente, email, notas } = values;
 
     if (!nombre) {
-      return formActionError("El nombre es obligatorio", values);
+      return formActionError("El nombre es obligatorio", values, {
+        nombre: "El nombre es obligatorio",
+      });
     }
     if (!id) {
-      if (!apellido) return formActionError("El apellido es obligatorio", values);
-      if (!telefono) return formActionError("El teléfono es obligatorio", values);
-      if (!documento) return formActionError("El documento es obligatorio", values);
-      if (!patente) return formActionError("La patente es obligatoria", values);
+      if (!apellido) {
+        return formActionError("El apellido es obligatorio", values, {
+          apellido: "El apellido es obligatorio",
+        });
+      }
+      if (!telefono) {
+        return formActionError("El teléfono es obligatorio", values, {
+          telefono: "El teléfono es obligatorio",
+        });
+      }
+      if (!documento) {
+        return formActionError("El documento es obligatorio", values, {
+          documento: "El documento es obligatorio",
+        });
+      }
+      if (!patente) {
+        return formActionError("La patente es obligatoria", values, {
+          patente: "La patente es obligatoria",
+        });
+      }
     }
 
     const cliente = await upsertCliente({
@@ -331,10 +366,18 @@ export async function saveClienteAction(
     redirect("/clientes");
   } catch (e) {
     if (e instanceof ClienteValidationError) {
-      return formActionError(e.message, values);
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForClienteValidation(e.message)
+      );
     }
     if (isDomainError(e)) {
-      return formActionError(e.message, values);
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForClienteValidation(e.message)
+      );
     }
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;
@@ -398,6 +441,11 @@ export async function saveVehiculoAction(
 
   try {
     const session = await requireSession();
+    if (!values.patente) {
+      return formActionError("La patente es obligatoria", values, {
+        patente: "La patente es obligatoria",
+      });
+    }
     await upsertVehiculo({
       empresaId: session.empresaId,
       patente: values.patente,
@@ -417,10 +465,18 @@ export async function saveVehiculoAction(
     redirect("/clientes");
   } catch (e) {
     if (e instanceof ClienteValidationError) {
-      return formActionError(e.message, values);
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForVehiculoValidation(e.message)
+      );
     }
     if (isDomainError(e)) {
-      return formActionError(e.message, values);
+      return formActionError(
+        e.message,
+        values,
+        fieldErrorsForVehiculoValidation(e.message)
+      );
     }
     if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
     throw e;

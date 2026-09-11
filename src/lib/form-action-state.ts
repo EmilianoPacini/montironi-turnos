@@ -2,16 +2,32 @@
 
 export type FormActionState<TValues extends Record<string, unknown>> = {
   error?: string;
-  /** Bumps on each failed submit so client forms can remount with new defaultValues. */
+  /** Field name → message; first key becomes focusField when omitted. */
+  fieldErrors?: Partial<Record<string, string>>;
+  focusField?: string;
+  /** Bumps on each failed submit so clients can react (focus, sync state). */
   formKey?: number;
   values?: TValues;
 };
 
 export function formActionError<TValues extends Record<string, unknown>>(
   error: string,
-  values: TValues
+  values: TValues,
+  fieldErrors?: Partial<Record<string, string>>,
+  focusField?: string
 ): FormActionState<TValues> {
-  return { error, values, formKey: Date.now() };
+  const errors = fieldErrors ?? {};
+  const resolvedFocus =
+    focusField ??
+    Object.keys(errors).find((key) => errors[key]) ??
+    undefined;
+  return {
+    error,
+    values,
+    fieldErrors: errors,
+    focusField: resolvedFocus,
+    formKey: Date.now(),
+  };
 }
 
 export function readString(formData: FormData, name: string): string {
