@@ -123,10 +123,12 @@ GET `?resource=servicios|disponibilidad|turno`
 ## Tests
 
 ```bash
-npm run test
+npm run test              # suite completa (unit + integration)
+npm run test:unit         # ocupación, FSM, authz
+npm run test:integration  # concurrencia, reprogramación, bloqueos
 ```
 
-Verifica detección de conflictos, exclusión en DB y cálculo de disponibilidad.
+Verifica detección de conflictos, exclusión en DB, hold de capacidad en pendientes, FSM y authz admin/empleado.
 
 ## Pantallas incluidas (V1)
 

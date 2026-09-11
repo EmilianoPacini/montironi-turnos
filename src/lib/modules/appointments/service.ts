@@ -349,7 +349,7 @@ export async function rescheduleTurno(params: {
       servicioIds,
       inicio: params.inicio,
       fin: finalizaEn,
-      bahiaId: params.bahiaId,
+      bahiaId: params.bahiaId ?? turno.bahiaId,
       excludeTurnoId: turno.id,
     }));
   } catch (e) {
@@ -495,20 +495,30 @@ async function transitionTurno(params: {
 }) {
   const db = params.tx ?? prisma;
 
-  return db.turno.update({
-    where: { id: params.turno.id },
+  const updated = await db.turno.updateMany({
+    where: { id: params.turno.id, version: params.turno.version },
     data: {
       estado: params.nuevoEstado,
       version: { increment: 1 },
-      eventos: {
-        create: {
-          estadoPrev: params.turno.estado,
-          estadoNuevo: params.nuevoEstado,
-          usuarioId: params.usuarioId,
-          detalle: params.detalle,
-        },
-      },
     },
+  });
+
+  if (updated.count === 0) {
+    throw new DomainError("El turno fue modificado", "VersionConflicto");
+  }
+
+  await db.eventoTurno.create({
+    data: {
+      turnoId: params.turno.id,
+      estadoPrev: params.turno.estado,
+      estadoNuevo: params.nuevoEstado,
+      usuarioId: params.usuarioId,
+      detalle: params.detalle,
+    },
+  });
+
+  return db.turno.findFirstOrThrow({
+    where: { id: params.turno.id },
     include: {
       cliente: true,
       vehiculo: true,

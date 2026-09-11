@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
+import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { saveConfigAction } from "@/lib/modules/appointments/actions";
-import { RolUsuario } from "@prisma/client";
 
 export default async function ConfigPage() {
   const session = await getAuthSession();
 
-  if (session.rol !== RolUsuario.admin) redirect("/agenda");
+  if (!canAccessPanelRoute(session.rol, "/configuracion")) redirect("/agenda");
 
   const talleres = await listTalleres(session.empresaId);
 

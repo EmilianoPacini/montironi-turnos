@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { EstadoTurno, RolUsuario } from "@prisma/client";
+import { EstadoTurno } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import {
   createTurno,
@@ -16,6 +16,7 @@ import {
 import { isDomainError } from "@/lib/modules/appointments/errors";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
 import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
+import { assertAdminRole } from "@/lib/auth/guards";
 
 function redirectWithError(path: string, message: string): never {
   const sep = path.includes("?") ? "&" : "?";
@@ -237,7 +238,11 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
 export async function saveServicioAction(formData: FormData): Promise<void> {
   try {
     const session = await requireSession();
-    if (session.rol !== RolUsuario.admin) redirect("/agenda");
+    try {
+      assertAdminRole(session.rol);
+    } catch {
+      redirect("/agenda");
+    }
 
     await createServicio({
       empresaId: session.empresaId,
@@ -258,7 +263,11 @@ export async function saveServicioAction(formData: FormData): Promise<void> {
 export async function saveConfigAction(formData: FormData): Promise<void> {
   try {
     const session = await requireSession();
-    if (session.rol !== RolUsuario.admin) redirect("/agenda");
+    try {
+      assertAdminRole(session.rol);
+    } catch {
+      redirect("/agenda");
+    }
 
     await updateConfiguracionTaller(
       String(formData.get("tallerId")),

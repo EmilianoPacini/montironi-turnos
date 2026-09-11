@@ -1,14 +1,13 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
+import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listServicios, listTiposServicio } from "@/lib/modules/catalog/service";
 import { saveServicioAction } from "@/lib/modules/appointments/actions";
-import { RolUsuario } from "@prisma/client";
 
 export default async function ServiciosPage() {
   const session = await getAuthSession();
-  
-  if (session.rol !== RolUsuario.admin) redirect("/agenda");
+
+  if (!canAccessPanelRoute(session.rol, "/servicios")) redirect("/agenda");
 
   const [servicios, tipos] = await Promise.all([
     listServicios(session.empresaId),
