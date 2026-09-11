@@ -159,6 +159,7 @@ describe("WAH · Comunicaciones (Emi contract)", () => {
     });
 
     vi.spyOn(wahScope, "requireWahSession").mockResolvedValue({
+      sessionId: "test-session-id",
       userId: fx.userId!,
       empresaId: fx.empresaId,
       email: "test@test.com",

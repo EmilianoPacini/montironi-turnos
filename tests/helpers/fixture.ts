@@ -129,6 +129,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
 }
 
 export async function destroyTestFixture(empresaId: string) {
+  await prisma.sesion.deleteMany({ where: { empresaId } });
   await prisma.wahMessage.deleteMany({ where: { empresaId } });
   await prisma.wahConversation.deleteMany({ where: { empresaId } });
   await prisma.wahMedia.deleteMany({ where: { empresaId } });

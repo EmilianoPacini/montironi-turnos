@@ -1,57 +1,38 @@
-import { getIronSession, SessionOptions } from "iron-session";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RolUsuario } from "@prisma/client";
+import {
+  clearCookieSession,
+  getCookieSession,
+  readCookieSessionId,
+  sessionOptions,
+  validateServerSession,
+  type AuthSession,
+} from "@/lib/auth/session/index";
 
-export interface SessionData {
-  userId: string;
-  empresaId: string;
-  email: string;
-  nombre: string;
-  rol: RolUsuario;
-  isLoggedIn: boolean;
-}
-
-export const defaultSession: SessionData = {
-  userId: "",
-  empresaId: "",
-  email: "",
-  nombre: "",
-  rol: RolUsuario.empleado,
-  isLoggedIn: false,
-};
-
-const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET!,
-  cookieName: "montironi_session",
-  cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-  },
-};
+export type { AuthSession as SessionData } from "@/lib/auth/session/index";
+export { sessionOptions };
 
 export async function getSession() {
-  const cookieStore = await cookies();
-  return getIronSession<SessionData>(cookieStore, sessionOptions);
+  return getCookieSession();
 }
 
-export async function requireSession(): Promise<
-  Required<Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">> & {
-    isLoggedIn: true;
-  }
-> {
-  const session = await getSession();
-  if (!session.isLoggedIn || !session.userId || !session.empresaId) {
+async function resolveAuthSession(): Promise<AuthSession> {
+  const sessionId = await readCookieSessionId();
+  if (!sessionId) {
     throw new Error("UNAUTHORIZED");
   }
-  return session as Required<
-    Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">
-  > & { isLoggedIn: true };
+  try {
+    return await validateServerSession(sessionId);
+  } catch {
+    throw new Error("UNAUTHORIZED");
+  }
 }
 
-export async function requireAdmin() {
+export async function requireSession(): Promise<AuthSession> {
+  return resolveAuthSession();
+}
+
+export async function requireAdmin(): Promise<AuthSession> {
   const session = await requireSession();
   if (session.rol !== RolUsuario.admin) {
     throw new Error("FORBIDDEN");
@@ -59,14 +40,14 @@ export async function requireAdmin() {
   return session;
 }
 
-export async function getAuthSession() {
-  const session = await getSession();
-  if (!session.isLoggedIn || !session.userId || !session.empresaId) {
+export async function getAuthSession(): Promise<AuthSession> {
+  try {
+    return await resolveAuthSession();
+  } catch {
     redirect("/login");
   }
-  return session as Required<
-    Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">
-  > & { isLoggedIn: true };
 }
 
-export { sessionOptions };
+export async function destroyClientSession() {
+  await clearCookieSession();
+}
