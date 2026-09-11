@@ -9,11 +9,13 @@ export function BlockTile({
   top,
   height,
   motivo,
+  autor,
 }: {
   blockId: string;
   top: number;
   height: number;
   motivo?: string | null;
+  autor?: string;
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -41,6 +43,7 @@ export function BlockTile({
         <div>
           <span className="font-semibold">Bloqueado</span>
           {motivo ? ` · ${motivo}` : ""}
+          {autor ? <span className="block text-[10px] opacity-75">por {autor}</span> : null}
         </div>
         <button
           type="button"

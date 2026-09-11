@@ -157,12 +157,14 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       bahiaId,
       inicio: slot,
       fin,
+      motivo: "Bloqueo test B1",
     });
     await blockBahia({
       empresaId,
       bahiaId: bahia2Id,
       inicio: slot,
       fin,
+      motivo: "Bloqueo test B2",
     });
 
     const result = await resolveBahiaAssignment({
@@ -246,6 +248,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       bahiaId,
       inicio: blockStart,
       fin: addMinutes(blockStart, 60),
+      motivo: "Bloqueo inicial",
     });
 
     await expect(
@@ -254,8 +257,22 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         bahiaId,
         inicio: addMinutes(blockStart, 30),
         fin: addMinutes(blockStart, 90),
+        motivo: "Bloqueo superpuesto",
       })
     ).rejects.toBeInstanceOf(AppointmentError);
+  });
+
+  it("exige motivo en bloqueos de bahía", async () => {
+    const blockStart = addMinutes(slotInicio, 480);
+    await expect(
+      blockBahia({
+        empresaId,
+        bahiaId,
+        inicio: blockStart,
+        fin: addMinutes(blockStart, 60),
+        motivo: "   ",
+      })
+    ).rejects.toMatchObject({ code: "MOTIVO_REQUIRED" });
   });
 
   it("calcula disponibilidad excluyendo ocupaciones", async () => {
@@ -293,6 +310,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       bahiaId,
       inicio: conflictStart,
       fin: addMinutes(conflictStart, 75),
+      motivo: "Bloqueo para reprogramación",
     });
 
     await expect(

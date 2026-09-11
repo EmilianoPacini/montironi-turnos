@@ -468,9 +468,14 @@ export async function blockBahia(params: {
   bahiaId: string;
   inicio: Date;
   fin: Date;
-  motivo?: string;
+  motivo: string;
   usuarioId?: string;
 }) {
+  const motivo = params.motivo.trim();
+  if (!motivo) {
+    throw new AppointmentError("El motivo es obligatorio para bloqueos", "MOTIVO_REQUIRED");
+  }
+
   const bahia = await prisma.bahia.findFirst({
     where: { id: params.bahiaId, taller: { empresaId: params.empresaId } },
   });
@@ -489,7 +494,8 @@ export async function blockBahia(params: {
         tipo: TipoOcupacion.bloqueo,
         inicio: params.inicio,
         fin: params.fin,
-        motivo: params.motivo,
+        motivo,
+        creadoPorUsuarioId: params.usuarioId,
         activo: true,
       },
     });

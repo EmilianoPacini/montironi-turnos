@@ -82,7 +82,7 @@ Migración única: `prisma/migrations/20260911152000_authoritative_init/migratio
 - `turno.finaliza_en` = suma de duraciones en `detalle_turno` + `configuracion_turnos.margen_minutos`
 - `turno.version` para optimistic locking; `operacion_api` UNIQUE `(empresa_id, idempotency_key)`
 - `ocupacion_bahia`: `periodo tstzrange` + `EXCLUDE USING gist (bahia_id WITH =, periodo WITH &&) WHERE (activo)`
-- Bloqueos manuales: `tipo='bloqueo'`, `turno_id` NULL, `motivo` opcional (sin turno ficticio)
+- Bloqueos manuales: `tipo='bloqueo'`, `turno_id` NULL, `motivo` obligatorio, `creado_por_usuario_id` opcional (sin turno ficticio)
 
 Para resetear desde cero: `npx prisma migrate reset --force`
 

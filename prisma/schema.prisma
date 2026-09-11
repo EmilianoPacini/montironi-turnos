@@ -117,6 +117,7 @@ model Usuario {
   empresa       Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   turnosCreados Turno[]       @relation("TurnoCreador")
   eventosTurno  EventoTurno[]
+  bloqueosCreados OcupacionBahia[] @relation("BloqueoCreador")
 
   @@unique([empresaId, email])
   @@map("usuario")
@@ -385,18 +386,20 @@ model DetalleTurno {
 }
 
 model OcupacionBahia {
-  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bahiaId   String        @map("bahia_id") @db.Uuid
-  turnoId   String?       @map("turno_id") @db.Uuid
-  tipo      TipoOcupacion
-  motivo    String?
-  inicio    DateTime      @db.Timestamptz(6)
-  fin       DateTime      @db.Timestamptz(6)
-  activo    Boolean       @default(true)
-  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bahiaId             String        @map("bahia_id") @db.Uuid
+  turnoId             String?       @map("turno_id") @db.Uuid
+  tipo                TipoOcupacion
+  motivo              String?
+  creadoPorUsuarioId  String?       @map("creado_por_usuario_id") @db.Uuid
+  inicio              DateTime      @db.Timestamptz(6)
+  fin                 DateTime      @db.Timestamptz(6)
+  activo              Boolean       @default(true)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  bahia Bahia  @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
-  turno Turno? @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  bahia     Bahia    @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
+  turno     Turno?   @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  creadoPor Usuario? @relation("BloqueoCreador", fields: [creadoPorUsuarioId], references: [id], onDelete: SetNull)
 
   @@index([bahiaId, inicio, fin])
   @@map("ocupacion_bahia")

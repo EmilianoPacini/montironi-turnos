@@ -229,6 +229,7 @@ CREATE TABLE ocupacion_bahia (
   turno_id UUID REFERENCES turno(id) ON DELETE RESTRICT,
   tipo tipo_ocupacion NOT NULL,
   motivo TEXT,
+  creado_por_usuario_id UUID REFERENCES usuario(id) ON DELETE SET NULL,
   inicio TIMESTAMPTZ NOT NULL,
   fin TIMESTAMPTZ NOT NULL,
   periodo TSTZRANGE GENERATED ALWAYS AS (tstzrange(inicio, fin, '[)')) STORED,
@@ -236,6 +237,9 @@ CREATE TABLE ocupacion_bahia (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT ocupacion_bahia_tipo_turno_chk CHECK (
     (tipo = 'turno' AND turno_id IS NOT NULL) OR (tipo = 'bloqueo' AND turno_id IS NULL)
+  ),
+  CONSTRAINT ocupacion_bahia_bloqueo_motivo_chk CHECK (
+    tipo <> 'bloqueo' OR (motivo IS NOT NULL AND btrim(motivo) <> '')
   )
 );
 

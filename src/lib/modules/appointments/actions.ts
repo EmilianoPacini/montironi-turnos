@@ -154,12 +154,17 @@ export async function blockBahiaAction(formData: FormData): Promise<void> {
 
   try {
     const session = await requireSession();
+    const motivo = String(formData.get("motivo") ?? "").trim();
+    if (!motivo) {
+      redirectWithError(returnPath, "El motivo es obligatorio para bloqueos");
+    }
+
     await blockBahia({
       empresaId: session.empresaId,
       bahiaId,
       inicio: new Date(String(formData.get("inicio"))),
       fin: new Date(String(formData.get("fin"))),
-      motivo: String(formData.get("motivo") ?? "") || undefined,
+      motivo,
       usuarioId: session.userId,
     });
     revalidatePath("/agenda");

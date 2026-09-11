@@ -37,6 +37,7 @@ interface Bloqueo {
   fin: Date | string;
   motivo?: string | null;
   tipo: TipoOcupacion;
+  creadoPor?: { nombre: string } | null;
 }
 
 interface ScheduleWindow {
@@ -201,6 +202,7 @@ export function AgendaGrid({
                     top={topPx(ini)}
                     height={heightPx(ini, fin)}
                     motivo={bloqueo.motivo}
+                    autor={bloqueo.creadoPor?.nombre}
                   />
                 );
               })}

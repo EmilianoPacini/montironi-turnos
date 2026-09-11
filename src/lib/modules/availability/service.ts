@@ -293,7 +293,7 @@ export async function getAgendaForDate(params: {
         inicio: { lt: dayEnd },
         fin: { gt: dayStart },
       },
-      include: { bahia: true },
+      include: { bahia: true, creadoPor: true },
     }),
     getTallerScheduleForDate(params.tallerId, params.date),
   ]);

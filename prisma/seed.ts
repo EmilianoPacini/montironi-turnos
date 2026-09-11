@@ -296,6 +296,7 @@ async function main() {
       inicio: timeOnToday(12, 0),
       fin: timeOnToday(13, 0),
       motivo: "Almuerzo / mantenimiento equipos",
+      creadoPorUsuarioId: admin.id,
       activo: true,
     },
   });
