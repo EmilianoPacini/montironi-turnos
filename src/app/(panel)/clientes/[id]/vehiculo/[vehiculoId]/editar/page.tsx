@@ -1,15 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { getCliente } from "@/lib/modules/customers/service";
+import { getCliente, getVehiculoForCliente } from "@/lib/modules/customers/service";
 import { saveVehiculoAction } from "@/lib/modules/appointments/actions";
 import { VehiculoForm } from "@/components/clientes/VehiculoForm";
 
-export default async function NuevoVehiculoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditarVehiculoPage({
+  params,
+}: {
+  params: Promise<{ id: string; vehiculoId: string }>;
+}) {
   const session = await getAuthSession();
-  const { id } = await params;
+  const { id, vehiculoId } = await params;
   const cliente = await getCliente(id, session.empresaId);
   if (!cliente) notFound();
+
+  const vehiculo = await getVehiculoForCliente(vehiculoId, id, session.empresaId);
+  if (!vehiculo) notFound();
 
   return (
     <div className="panel-page">
@@ -19,15 +26,14 @@ export default async function NuevoVehiculoPage({ params }: { params: Promise<{ 
       >
         ← {cliente.nombre} {cliente.apellido ?? ""}
       </Link>
-      <h1 className="panel-title mt-4">Nuevo vehículo</h1>
-      <p className="panel-subtitle">
-        Mismos campos que al crear un vehículo desde un turno nuevo.
-      </p>
+      <h1 className="panel-title mt-4">Editar vehículo</h1>
+      <p className="panel-subtitle">Patente {vehiculo.patente}</p>
       <div className="mt-6">
         <VehiculoForm
           action={saveVehiculoAction}
           clienteId={id}
-          submitLabel="Guardar vehículo"
+          vehiculo={vehiculo}
+          submitLabel="Guardar cambios"
           cancelHref={`/clientes/${id}#vehiculos`}
         />
       </div>

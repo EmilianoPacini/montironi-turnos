@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getAuthSession } from "@/lib/auth/session";
 import { listClientes } from "@/lib/modules/customers/service";
 import { ClienteSearchForm } from "@/components/clientes/ClienteSearchForm";
+import { ClienteVehiculosCell } from "@/components/clientes/ClienteVehiculosCell";
 
 export default async function ClientesPage({
   searchParams,
@@ -54,11 +55,11 @@ export default async function ClientesPage({
                       {c.nombre} {c.apellido ?? ""}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{c.telefono ?? "—"}</td>
-                  <td className="px-4 py-3">{c.documento ?? "—"}</td>
-                  <td className="px-4 py-3">{c.email ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {c.vehiculos.map((v) => v.vehiculo.patente).join(", ") || "—"}
+                  <td>{c.telefono ?? "—"}</td>
+                  <td>{c.documento ?? "—"}</td>
+                  <td>{c.email ?? "—"}</td>
+                  <td>
+                    <ClienteVehiculosCell clienteId={c.id} vehiculos={c.vehiculos} />
                   </td>
                 </tr>
               ))

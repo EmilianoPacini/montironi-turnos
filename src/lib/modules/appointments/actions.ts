@@ -303,8 +303,11 @@ export async function createVehiculoInlineAction(formData: FormData) {
 
 export async function saveVehiculoAction(formData: FormData): Promise<void> {
   const clienteId = String(formData.get("clienteId") ?? "") || undefined;
+  const vehiculoId = String(formData.get("vehiculoId") ?? "").trim();
   const returnPath = clienteId
-    ? `/clientes/${clienteId}/vehiculo/nuevo`
+    ? vehiculoId
+      ? `/clientes/${clienteId}/vehiculo/${vehiculoId}/editar`
+      : `/clientes/${clienteId}/vehiculo/nuevo`
     : "/clientes";
 
   try {
@@ -324,7 +327,7 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
       clienteId,
     });
     revalidatePath("/clientes");
-    if (clienteId) redirect(`/clientes/${clienteId}`);
+    if (clienteId) redirect(`/clientes/${clienteId}#vehiculos`);
     redirect("/clientes");
   } catch (e) {
     handleFormError(e, returnPath);

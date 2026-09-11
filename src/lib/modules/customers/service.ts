@@ -253,6 +253,23 @@ export async function upsertVehiculo(params: {
   return vehiculo;
 }
 
+export async function getVehiculoForCliente(
+  vehiculoId: string,
+  clienteId: string,
+  empresaId: string
+) {
+  const link = await prisma.clienteVehiculo.findFirst({
+    where: {
+      vehiculoId,
+      clienteId,
+      cliente: { empresaId },
+      vehiculo: { empresaId },
+    },
+    include: { vehiculo: true },
+  });
+  return link?.vehiculo ?? null;
+}
+
 export async function linkVehiculoToCliente(
   clienteId: string,
   vehiculoId: string,

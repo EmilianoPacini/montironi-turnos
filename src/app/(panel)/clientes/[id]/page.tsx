@@ -1,8 +1,12 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
 import { getCliente } from "@/lib/modules/customers/service";
+import { enrichVehiculosForCliente } from "@/lib/modules/customers/vehiculo-display";
+import { VehiculoListSection } from "@/components/clientes/VehiculoListSection";
+import { EstadoChip } from "@/components/turnos/EstadoChip";
+import { EstadoTurno } from "@prisma/client";
 
 export default async function ClienteDetailPage({
   params,
@@ -15,63 +19,70 @@ export default async function ClienteDetailPage({
   const cliente = await getCliente(id, session.empresaId);
   if (!cliente) notFound();
 
+  const vehiculos = await enrichVehiculosForCliente(session.empresaId, cliente.vehiculos);
+
   return (
-    <div className="p-6 lg:p-8">
-      <Link href="/clientes" className="text-sm text-slate-600 hover:text-slate-900">
+    <div className="panel-page">
+      <Link
+        href="/clientes"
+        className="text-sm font-medium text-slate-600 transition hover:text-blue-700"
+      >
         ← Clientes
       </Link>
-      <div className="mt-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="panel-title">
           {cliente.nombre} {cliente.apellido ?? ""}
         </h1>
         <Link
           href={`/clientes/${cliente.id}/editar`}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+          className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
-          Editar
+          Editar cliente
         </Link>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border bg-white p-5">
-          <h2 className="mb-3 font-semibold">Contacto</h2>
-          <dl className="space-y-2 text-sm">
-            <div><dt className="text-slate-500">Teléfono</dt><dd>{cliente.telefono ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Email</dt><dd>{cliente.email ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Documento</dt><dd>{cliente.documento ?? "—"}</dd></div>
-          </dl>
-        </section>
+      <section className="panel-card mt-6 p-5 lg:max-w-md">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">Contacto</h2>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-slate-500">Teléfono</dt>
+            <dd className="font-medium text-slate-900">{cliente.telefono ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Email</dt>
+            <dd className="font-medium text-slate-900">{cliente.email ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Documento</dt>
+            <dd className="font-medium text-slate-900">{cliente.documento ?? "—"}</dd>
+          </div>
+        </dl>
+      </section>
 
-        <section className="rounded-xl border bg-white p-5">
-          <h2 className="mb-3 font-semibold">Vehículos</h2>
-          <ul className="space-y-2 text-sm">
-            {cliente.vehiculos.map((cv) => (
-              <li key={cv.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                {cv.vehiculo.patente} · {cv.vehiculo.marca} {cv.vehiculo.modelo}
-              </li>
-            ))}
-          </ul>
-          <Link
-            href={`/clientes/${cliente.id}/vehiculo/nuevo`}
-            className="mt-3 inline-block text-sm text-indigo-700 hover:underline"
-          >
-            + Agregar vehículo
-          </Link>
-        </section>
-
-        <section className="rounded-xl border bg-white p-5 lg:col-span-2">
-          <h2 className="mb-3 font-semibold">Turnos recientes</h2>
-          <ul className="space-y-2 text-sm">
-            {cliente.turnos.map((t) => (
-              <li key={t.id}>
-                <Link href={`/turnos/${t.id}`} className="text-indigo-700 hover:underline">
-                  {format(t.inicio, "dd/MM/yyyy HH:mm")} · {t.estado} · {t.detalles[0]?.nombreSnapshot}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+      <div className="mt-6">
+        <VehiculoListSection clienteId={cliente.id} vehiculos={vehiculos} />
       </div>
+
+      <section className="panel-card mt-6 p-5">
+          <h2 className="mb-3 text-lg font-semibold text-slate-900">Turnos recientes</h2>
+          {cliente.turnos.length === 0 ? (
+            <p className="text-sm text-slate-500">Sin turnos registrados.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {cliente.turnos.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                  <Link
+                    href={`/turnos/${t.id}`}
+                    className="font-medium text-blue-700 hover:text-blue-800 hover:underline"
+                  >
+                    {format(t.inicio, "dd/MM/yyyy HH:mm")} · {t.detalles[0]?.nombreSnapshot ?? "Turno"}
+                  </Link>
+                  <EstadoChip estado={t.estado as EstadoTurno} />
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
     </div>
   );
 }
