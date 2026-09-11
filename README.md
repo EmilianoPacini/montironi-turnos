@@ -8,40 +8,43 @@ Agenda compartida de turnos para concesionaria/taller. Empleados (panel web) y a
 - Docker y Docker Compose (para PostgreSQL)
 - npm
 
-## Puesta en marcha
-
-### 1. Base de datos
+## Puesta en marcha (comandos exactos)
 
 ```bash
-docker compose up -d
-```
-
-PostgreSQL queda disponible en `localhost:5433` con usuario/contraseña/base `montironi`.
-
-### 2. Variables de entorno
-
-Copiá `.env.example` a `.env` y ajustá si hace falta:
-
-```bash
-cp .env.example .env
-```
-
-### 3. Migraciones y seed
-
-```bash
+# 1) Dependencias
 npm install
-npm run db:setup
-```
 
-Esto aplica migraciones (incluye constraint de exclusión en `ocupacion_bahia`) y carga datos de prueba.
+# 2) Variables de entorno
+cp .env.example .env
 
-### 4. Servidor de desarrollo
+# 3) PostgreSQL (Docker Compose — puerto 5433)
+docker compose up -d
+# Esperar healthcheck: docker compose ps
 
-```bash
+# 4) Migraciones + seed (desarrollo — resetea la DB)
+npx prisma migrate reset --force
+
+# Alternativa sin reset (CI / prod local):
+# npm run db:setup    # prisma migrate deploy && seed
+
+# 5) Tests
+npm run test
+
+# 6) Servidor de desarrollo
 npm run dev
 ```
 
-Abrí [http://localhost:43123](http://localhost:43123)
+Abrí [http://localhost:43123/login](http://localhost:43123/login) → credenciales abajo → redirige a `/agenda`.
+
+**Conexión DB (Docker):** `postgresql://montironi:montironi@localhost:5433/montironi_turnos` (ver `.env.example`).
+
+**Verificación rápida:**
+
+```bash
+npm run db:seed   # idempotente sobre datos existentes
+npm run test      # 22 tests
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:43123/login  # 200
+```
 
 ## Usuarios de prueba
 
@@ -54,12 +57,15 @@ V1 del panel usa solo roles `admin` y `empleado` (el enum incluye también `oper
 
 ## Scripts útiles
 
-| Comando           | Descripción                          |
-|-------------------|--------------------------------------|
-| `npm run dev`     | App Next.js en puerto 43123          |
-| `npm run db:setup`| Migrar + seed                        |
-| `npm run test`    | Tests de disponibilidad/exclusión    |
-| `npm run build`   | Build de producción                  |
+| Comando | Descripción |
+|---------|-------------|
+| `docker compose up -d` | PostgreSQL en `:5433` |
+| `npx prisma migrate reset --force` | Reset + migrar + seed (dev) |
+| `npm run db:setup` | `migrate deploy` + seed (sin reset) |
+| `npm run db:seed` | Solo seed |
+| `npm run test` | 22 tests (unit + integration) |
+| `npm run dev` | Next.js en [http://localhost:43123](http://localhost:43123) |
+| `npm run build` | Build de producción |
 
 ## Arquitectura
 
