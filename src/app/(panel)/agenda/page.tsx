@@ -5,6 +5,7 @@ import { es } from "date-fns/locale";
 import { getAuthSession } from "@/lib/auth/session";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { getAgendaForDate } from "@/lib/modules/availability/service";
+import { expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { AgendaGrid } from "@/components/agenda/AgendaGrid";
 import { AgendaToolbar } from "@/components/agenda/AgendaToolbar";
 import { TurnoCard } from "@/components/turnos/TurnoCard";
@@ -42,6 +43,8 @@ export default async function AgendaPage({
       </div>
     );
   }
+
+  await expirePendingTurnos(session.empresaId);
 
   const agenda = await getAgendaForDate({
     empresaId: session.empresaId,

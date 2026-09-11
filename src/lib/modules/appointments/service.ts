@@ -3,6 +3,8 @@ import prisma from "@/lib/db";
 import {
   calcularDuracionTotal,
   checkSlotAvailable,
+  getCompatibleBahias,
+  getMargenMin,
 } from "@/lib/modules/availability/service";
 import { canTransition, isActiveEstado } from "@/lib/modules/appointments/constants";
 
@@ -19,7 +21,7 @@ export class AppointmentError extends Error {
 export interface CreateTurnoInput {
   empresaId: string;
   tallerId: string;
-  bahiaId: string;
+  bahiaId?: string;
   clienteId: string;
   vehiculoId: string;
   servicioIds: string[];
@@ -31,11 +33,102 @@ export interface CreateTurnoInput {
   confirmar?: boolean;
 }
 
-export async function createTurno(input: CreateTurnoInput) {
-  const { duracionMin, servicios } = await calcularDuracionTotal(
-    input.empresaId,
-    input.servicioIds
+export async function resolveBahiaAssignment(params: {
+  tallerId: string;
+  servicioIds: string[];
+  inicio: Date;
+  fin: Date;
+  bahiaId?: string;
+  excludeTurnoId?: string;
+}): Promise<{ bahiaId: string; autoAssigned: boolean }> {
+  const compatible = await getCompatibleBahias(params.tallerId, params.servicioIds);
+
+  if (compatible.length === 0) {
+    throw new AppointmentError("Ninguna bahía compatible con los servicios", "INCOMPATIBLE_BAY");
+  }
+
+  if (params.bahiaId) {
+    if (!compatible.some((b) => b.id === params.bahiaId)) {
+      throw new AppointmentError("Bahía incompatible con los servicios", "INCOMPATIBLE_BAY");
+    }
+    const available = await checkSlotAvailable(
+      params.bahiaId,
+      params.inicio,
+      params.fin,
+      params.excludeTurnoId
+    );
+    if (!available) {
+      throw new AppointmentError("Horario no disponible", "SLOT_UNAVAILABLE");
+    }
+    return { bahiaId: params.bahiaId, autoAssigned: false };
+  }
+
+  const availableBahias = [];
+  for (const bahia of compatible) {
+    if (
+      await checkSlotAvailable(bahia.id, params.inicio, params.fin, params.excludeTurnoId)
+    ) {
+      availableBahias.push(bahia);
+    }
+  }
+
+  if (availableBahias.length === 0) {
+    throw new AppointmentError("Horario no disponible", "SLOT_UNAVAILABLE");
+  }
+
+  if (availableBahias.length === 1) {
+    return { bahiaId: availableBahias[0].id, autoAssigned: true };
+  }
+
+  throw new AppointmentError(
+    "Seleccioná una bahía — hay varias compatibles disponibles",
+    "BAY_REQUIRED"
   );
+}
+
+/** Only automatic transition: pendiente → vencido when start time passes unconfirmed. */
+export async function expirePendingTurnos(empresaId: string): Promise<number> {
+  const now = new Date();
+  const expired = await prisma.turno.findMany({
+    where: {
+      empresaId,
+      estado: EstadoTurno.pendiente,
+      inicio: { lt: now },
+    },
+  });
+
+  for (const turno of expired) {
+    await prisma.$transaction(async (tx) => {
+      await tx.ocupacionBahia.updateMany({
+        where: { turnoId: turno.id },
+        data: { activo: false },
+      });
+      await tx.turno.update({
+        where: { id: turno.id },
+        data: {
+          estado: EstadoTurno.vencido,
+          version: { increment: 1 },
+          eventos: {
+            create: {
+              estadoPrev: EstadoTurno.pendiente,
+              estadoNuevo: EstadoTurno.vencido,
+              detalle: "Vencido automáticamente — hora de inicio superada sin confirmación",
+            },
+          },
+        },
+      });
+    });
+  }
+
+  return expired.length;
+}
+
+export async function createTurno(input: CreateTurnoInput) {
+  const { duracionMin, servicios } = await calcularDuracionTotal({
+    empresaId: input.empresaId,
+    tallerId: input.tallerId,
+    servicioIds: input.servicioIds,
+  });
 
   if (servicios.length !== input.servicioIds.length) {
     throw new AppointmentError("Servicios inválidos", "INVALID_SERVICES");
@@ -43,10 +136,13 @@ export async function createTurno(input: CreateTurnoInput) {
 
   const fin = new Date(input.inicio.getTime() + duracionMin * 60_000);
 
-  const available = await checkSlotAvailable(input.bahiaId, input.inicio, fin);
-  if (!available) {
-    throw new AppointmentError("Horario no disponible", "SLOT_UNAVAILABLE");
-  }
+  const { bahiaId } = await resolveBahiaAssignment({
+    tallerId: input.tallerId,
+    servicioIds: input.servicioIds,
+    inicio: input.inicio,
+    fin,
+    bahiaId: input.bahiaId,
+  });
 
   const estado = input.confirmar ? EstadoTurno.confirmado : EstadoTurno.pendiente;
 
@@ -56,7 +152,7 @@ export async function createTurno(input: CreateTurnoInput) {
         data: {
           empresaId: input.empresaId,
           tallerId: input.tallerId,
-          bahiaId: input.bahiaId,
+          bahiaId,
           clienteId: input.clienteId,
           vehiculoId: input.vehiculoId,
           creadorId: input.creadorId,
@@ -72,6 +168,7 @@ export async function createTurno(input: CreateTurnoInput) {
               nombreSnapshot: s.nombre,
               duracionMin: s.duracionMin,
               precioSnapshot: s.precio,
+              modoPrecioSnapshot: s.modoPrecio,
               orden: i,
             })),
           },
@@ -94,7 +191,7 @@ export async function createTurno(input: CreateTurnoInput) {
 
       await tx.ocupacionBahia.create({
         data: {
-          bahiaId: input.bahiaId,
+          bahiaId,
           turnoId: turno.id,
           tipo: TipoOcupacion.turno,
           inicio: input.inicio,
@@ -158,7 +255,7 @@ export async function confirmTurno(params: {
 export async function rescheduleTurno(params: {
   turnoId: string;
   empresaId: string;
-  bahiaId: string;
+  bahiaId?: string;
   inicio: Date;
   version: number;
   usuarioId?: string;
@@ -177,30 +274,29 @@ export async function rescheduleTurno(params: {
     throw new AppointmentError("Turno no modificable", "INVALID_STATE");
   }
 
-  const margen =
-    (
-      await prisma.configuracionTurnos.findUnique({
-        where: { empresaId: params.empresaId },
-      })
-    )?.margenMin ?? 15;
-
-  const duracionMin =
-    turno.detalles.reduce((a, d) => a + d.duracionMin, 0) + margen;
-
+  const margen = await getMargenMin(turno.tallerId);
+  const servicioIds = turno.detalles.map((d) => d.servicioId);
+  const duracionMin = turno.detalles.reduce((a, d) => a + d.duracionMin, 0) + margen;
   const fin = new Date(params.inicio.getTime() + duracionMin * 60_000);
 
-  const available = await checkSlotAvailable(
-    params.bahiaId,
-    params.inicio,
-    fin,
-    turno.id
-  );
-
-  if (!available) {
-    throw new AppointmentError(
-      "Conflicto al reprogramar — se mantiene el horario anterior",
-      "RESCHEDULE_CONFLICT"
-    );
+  let resolvedBahiaId: string;
+  try {
+    ({ bahiaId: resolvedBahiaId } = await resolveBahiaAssignment({
+      tallerId: turno.tallerId,
+      servicioIds,
+      inicio: params.inicio,
+      fin,
+      bahiaId: params.bahiaId,
+      excludeTurnoId: turno.id,
+    }));
+  } catch (e) {
+    if (e instanceof AppointmentError) {
+      throw new AppointmentError(
+        "Conflicto al reprogramar — se mantiene el horario anterior",
+        "RESCHEDULE_CONFLICT"
+      );
+    }
+    throw e;
   }
 
   try {
@@ -212,7 +308,7 @@ export async function rescheduleTurno(params: {
 
       await tx.ocupacionBahia.create({
         data: {
-          bahiaId: params.bahiaId,
+          bahiaId: resolvedBahiaId,
           turnoId: turno.id,
           tipo: TipoOcupacion.turno,
           inicio: params.inicio,
@@ -224,7 +320,7 @@ export async function rescheduleTurno(params: {
       return tx.turno.update({
         where: { id: turno.id },
         data: {
-          bahiaId: params.bahiaId,
+          bahiaId: resolvedBahiaId,
           inicio: params.inicio,
           fin,
           version: { increment: 1 },
@@ -314,6 +410,9 @@ export async function transitionTurnoState(params: {
   if (!turno) throw new AppointmentError("Turno no encontrado", "NOT_FOUND");
   if (turno.version !== params.version) {
     throw new AppointmentError("El turno fue modificado", "VERSION_CONFLICT");
+  }
+  if (params.nuevoEstado === EstadoTurno.vencido) {
+    throw new AppointmentError("Vencido solo se aplica automáticamente", "INVALID_TRANSITION");
   }
   if (!canTransition(turno.estado, params.nuevoEstado)) {
     throw new AppointmentError("Transición inválida", "INVALID_TRANSITION");

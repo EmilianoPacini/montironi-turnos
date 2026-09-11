@@ -35,20 +35,21 @@ export function formatDateLong(date: Date): string {
   return format(date, "EEEE d 'de' MMMM yyyy", { locale: es });
 }
 
-export async function getMargenMin(empresaId: string): Promise<number> {
+export async function getMargenMin(tallerId: string): Promise<number> {
   const config = await prisma.configuracionTurnos.findUnique({
-    where: { empresaId },
+    where: { tallerId },
   });
   return config?.margenMin ?? 15;
 }
 
-export async function calcularDuracionTotal(
-  empresaId: string,
-  servicioIds: string[]
-): Promise<{ duracionMin: number; servicios: Awaited<ReturnType<typeof loadServicios>> }> {
-  const servicios = await loadServicios(empresaId, servicioIds);
+export async function calcularDuracionTotal(params: {
+  empresaId: string;
+  tallerId: string;
+  servicioIds: string[];
+}): Promise<{ duracionMin: number; servicios: Awaited<ReturnType<typeof loadServicios>> }> {
+  const servicios = await loadServicios(params.empresaId, params.servicioIds);
   const sum = servicios.reduce((acc, s) => acc + s.duracionMin, 0);
-  const margen = await getMargenMin(empresaId);
+  const margen = await getMargenMin(params.tallerId);
   return { duracionMin: sum + margen, servicios };
 }
 
@@ -67,6 +68,28 @@ export interface BahiaAvailability {
   bahiaId: string;
   bahiaNombre: string;
   slots: TimeSlot[];
+}
+
+export async function getCompatibleBahias(tallerId: string, servicioIds: string[]) {
+  const bahias = await prisma.bahia.findMany({
+    where: { tallerId, activa: true },
+    orderBy: { orden: "asc" },
+  });
+
+  if (servicioIds.length === 0) return bahias;
+
+  const compatible = [];
+  for (const bahia of bahias) {
+    const allowed = await prisma.bahiaServicio.count({
+      where: {
+        bahiaId: bahia.id,
+        servicioId: { in: servicioIds },
+        activo: true,
+      },
+    });
+    if (allowed >= servicioIds.length) compatible.push(bahia);
+  }
+  return compatible;
 }
 
 export async function getTallerScheduleForDate(
@@ -203,37 +226,23 @@ export async function getAvailabilityForDate(params: {
   servicioIds: string[];
   bahiaId?: string;
 }): Promise<BahiaAvailability[]> {
-  const { duracionMin } = await calcularDuracionTotal(
-    params.empresaId,
-    params.servicioIds
-  );
+  const { duracionMin } = await calcularDuracionTotal({
+    empresaId: params.empresaId,
+    tallerId: params.tallerId,
+    servicioIds: params.servicioIds,
+  });
 
   const schedule = await getTallerScheduleForDate(params.tallerId, params.date);
   if (schedule.length === 0) return [];
 
-  const bahias = await prisma.bahia.findMany({
-    where: {
-      tallerId: params.tallerId,
-      activa: true,
-      ...(params.bahiaId ? { id: params.bahiaId } : {}),
-    },
-    orderBy: { orden: "asc" },
-  });
+  const compatibleBahias = await getCompatibleBahias(params.tallerId, params.servicioIds);
+  const bahias = params.bahiaId
+    ? compatibleBahias.filter((b) => b.id === params.bahiaId)
+    : compatibleBahias;
 
   const results: BahiaAvailability[] = [];
 
   for (const bahia of bahias) {
-    if (params.servicioIds.length > 0) {
-      const allowed = await prisma.bahiaServicio.count({
-        where: {
-          bahiaId: bahia.id,
-          servicioId: { in: params.servicioIds },
-          activo: true,
-        },
-      });
-      if (allowed < params.servicioIds.length) continue;
-    }
-
     const occupied = await getOcupacionesForBahia(bahia.id, params.date);
     const freeWindows = subtractOccupiedFromWindows(schedule, occupied);
     const slots = slotsFromFreeWindows(freeWindows, duracionMin);

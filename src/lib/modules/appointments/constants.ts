@@ -21,14 +21,16 @@ export const ORIGEN_LABELS: Record<string, string> = {
   api: "API",
 };
 
+export const MODO_PRECIO_LABELS: Record<string, string> = {
+  fijo: "Precio fijo",
+  desde: "Desde",
+  a_presupuestar: "A presupuestar",
+};
+
+/** Manual transitions only. vencido is automatic (pendiente → vencido on expiry). */
 export const VALID_TRANSITIONS: Record<EstadoTurno, EstadoTurno[]> = {
-  pendiente: [EstadoTurno.confirmado, EstadoTurno.cancelado, EstadoTurno.vencido],
-  confirmado: [
-    EstadoTurno.recibido,
-    EstadoTurno.cancelado,
-    EstadoTurno.ausente,
-    EstadoTurno.vencido,
-  ],
+  pendiente: [EstadoTurno.confirmado, EstadoTurno.cancelado],
+  confirmado: [EstadoTurno.recibido, EstadoTurno.cancelado, EstadoTurno.ausente],
   recibido: [EstadoTurno.en_servicio, EstadoTurno.cancelado, EstadoTurno.ausente],
   en_servicio: [EstadoTurno.finalizado],
   finalizado: [],
@@ -49,4 +51,11 @@ export function isActiveEstado(estado: EstadoTurno): boolean {
     EstadoTurno.finalizado,
   ];
   return !terminal.includes(estado);
+}
+
+export function formatPrecioSnapshot(precio: number | string, modo: string): string {
+  const value = Number(precio).toLocaleString("es-AR");
+  if (modo === "desde") return `Desde $${value}`;
+  if (modo === "a_presupuestar") return "A presupuestar";
+  return `$${value}`;
 }

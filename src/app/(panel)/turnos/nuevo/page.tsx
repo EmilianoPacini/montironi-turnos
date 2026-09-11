@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
 import { listTalleres, serviciosForTaller } from "@/lib/modules/catalog/service";
 import { listClientes } from "@/lib/modules/customers/service";
-import { getAvailabilityForDate } from "@/lib/modules/availability/service";
+import { getAvailabilityForDate, getCompatibleBahias } from "@/lib/modules/availability/service";
 import { createTurnoAction } from "@/lib/modules/appointments/actions";
+import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { format, parseISO, startOfDay } from "date-fns";
 
 export default async function NuevoTurnoPage({
@@ -31,6 +31,11 @@ export default async function NuevoTurnoPage({
   const date = inicioParam ? startOfDay(parseISO(inicioParam)) : startOfDay(new Date());
 
   const bahias = talleres.find((t) => t.id === tallerId)?.bahias ?? [];
+  const compatibleBahias = await getCompatibleBahias(
+    tallerId,
+    servicios.slice(0, 1).map((s) => s.id)
+  );
+  const autoBahia = compatibleBahias.length === 1;
 
   return (
     <div className="p-6 lg:p-8">
@@ -74,27 +79,44 @@ export default async function NuevoTurnoPage({
             {servicios.map((s) => (
               <label key={s.id} className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="servicioIds" value={s.id} />
-                {s.nombre} ({s.duracionMin} min)
+                <span>
+                  {s.nombre} ({s.duracionMin} min) ·{" "}
+                  {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
+                </span>
               </label>
             ))}
           </div>
         </fieldset>
 
-        <label className="block text-sm">
+        <div className="block text-sm">
           <span className="mb-1 block font-medium">Bahía</span>
-          <select
-            name="bahiaId"
-            required
-            defaultValue={bahiaId}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            {bahias.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+          {autoBahia ? (
+            <>
+              <input type="hidden" name="bahiaId" value={compatibleBahias[0].id} />
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+                Se asignará automáticamente: {compatibleBahias[0].nombre}
+              </p>
+            </>
+          ) : (
+            <>
+              <select
+                name="bahiaId"
+                defaultValue={bahiaId ?? ""}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              >
+                <option value="">Auto si hay una sola compatible</option>
+                {bahias.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Con varias bahías compatibles disponibles, seleccioná una explícitamente.
+              </p>
+            </>
+          )}
+        </div>
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Fecha y hora de inicio</span>

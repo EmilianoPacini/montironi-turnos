@@ -1,39 +1,47 @@
 import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { listTalleres, getConfiguracion } from "@/lib/modules/catalog/service";
+import { listTalleres } from "@/lib/modules/catalog/service";
 import { saveConfigAction } from "@/lib/modules/appointments/actions";
 import { RolUsuario } from "@prisma/client";
 
 export default async function ConfigPage() {
   const session = await getAuthSession();
-  
+
   if (session.rol !== RolUsuario.ADMIN) redirect("/agenda");
 
-  const [talleres, config] = await Promise.all([
-    listTalleres(session.empresaId),
-    getConfiguracion(session.empresaId),
-  ]);
+  const talleres = await listTalleres(session.empresaId);
 
   return (
     <div className="p-6 lg:p-8">
       <h1 className="text-2xl font-bold">Configuración</h1>
 
-      <section className="mt-6 max-w-lg rounded-xl border bg-white p-5">
-        <h2 className="mb-4 font-semibold">Reglas de turnos</h2>
-        <form action={saveConfigAction} className="space-y-4">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Margen entre turnos (minutos)</span>
-            <input
-              name="margenMin"
-              type="number"
-              defaultValue={config?.margenMin ?? 15}
-              className="w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-          <button type="submit" className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white">
-            Guardar
-          </button>
-        </form>
+      <section className="mt-6 space-y-4">
+        <h2 className="font-semibold">Margen entre turnos (por taller)</h2>
+        {talleres.map((t) => (
+          <form
+            key={t.id}
+            action={saveConfigAction}
+            className="max-w-lg rounded-xl border bg-white p-5"
+          >
+            <input type="hidden" name="tallerId" value={t.id} />
+            <h3 className="mb-3 font-medium">{t.nombre}</h3>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Margen (minutos)</span>
+              <input
+                name="margenMin"
+                type="number"
+                defaultValue={t.configuracion?.margenMin ?? 15}
+                className="w-full rounded-lg border px-3 py-2"
+              />
+            </label>
+            <button
+              type="submit"
+              className="mt-3 rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white"
+            >
+              Guardar
+            </button>
+          </form>
+        ))}
       </section>
 
       <section className="mt-8">
@@ -45,10 +53,15 @@ export default async function ConfigPage() {
               <p className="text-sm text-slate-600">{t.direccion}</p>
               <ul className="mt-3 space-y-1 text-sm">
                 {t.bahias.map((b) => (
-                  <li key={b.id} className="rounded bg-slate-50 px-2 py-1">{b.nombre}</li>
+                  <li key={b.id} className="rounded bg-slate-50 px-2 py-1">
+                    {b.nombre}
+                  </li>
                 ))}
               </ul>
-              <p className="mt-3 text-xs text-slate-500">Horario: Lun–Vie 08:00–12:00 y 13:00–18:00</p>
+              <p className="mt-3 text-xs text-slate-500">
+                Horario: Lun–Vie 08:00–12:00 y 13:00–18:00 · Margen{" "}
+                {t.configuracion?.margenMin ?? 15} min
+              </p>
             </div>
           ))}
         </div>

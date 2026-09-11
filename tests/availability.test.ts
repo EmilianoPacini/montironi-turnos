@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient, DiaSemana } from "@prisma/client";
+import { PrismaClient, DiaSemana, EstadoTurno } from "@prisma/client";
 import {
   checkSlotAvailable,
   getAvailabilityForDate,
@@ -7,6 +7,8 @@ import {
 import {
   createTurno,
   blockBahia,
+  expirePendingTurnos,
+  resolveBahiaAssignment,
   AppointmentError,
 } from "@/lib/modules/appointments/service";
 import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
@@ -18,6 +20,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
   let tallerId: string;
   let bahiaId: string;
   let bahia2Id: string;
+  let bahia3Id: string;
   let clienteId: string;
   let vehiculoId: string;
   let servicioId: string;
@@ -29,14 +32,14 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     });
     empresaId = empresa.id;
 
-    await prisma.configuracionTurnos.create({
-      data: { empresaId, margenMin: 15 },
-    });
-
     const taller = await prisma.taller.create({
       data: { empresaId, nombre: "Test Taller" },
     });
     tallerId = taller.id;
+
+    await prisma.configuracionTurnos.create({
+      data: { tallerId, margenMin: 15 },
+    });
 
     const bahia = await prisma.bahia.create({
       data: { tallerId, nombre: "B1", orden: 1 },
@@ -47,6 +50,11 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       data: { tallerId, nombre: "B2", orden: 2 },
     });
     bahia2Id = bahia2.id;
+
+    const bahia3 = await prisma.bahia.create({
+      data: { tallerId, nombre: "B3", orden: 3 },
+    });
+    bahia3Id = bahia3.id;
 
     const patron = await prisma.patronHorario.create({
       data: { tallerId, dia: DiaSemana.lunes },
@@ -65,13 +73,15 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
         nombre: "Servicio test",
         duracionMin: 60,
         precio: 1000,
+        modoPrecio: "fijo",
       },
     });
     servicioId = servicio.id;
 
     await prisma.tallerServicio.create({ data: { tallerId, servicioId } });
-    await prisma.bahiaServicio.create({ data: { bahiaId, servicioId } });
-    await prisma.bahiaServicio.create({ data: { bahiaId: bahia2Id, servicioId } });
+    for (const bId of [bahiaId, bahia2Id, bahia3Id]) {
+      await prisma.bahiaServicio.create({ data: { bahiaId: bId, servicioId } });
+    }
 
     const cliente = await prisma.cliente.create({
       data: { empresaId, nombre: "Test Cliente" },
@@ -83,7 +93,6 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     });
     vehiculoId = vehiculo.id;
 
-    // Use next Monday for schedule match
     const today = new Date();
     const day = today.getDay();
     const daysUntilMonday = day === 0 ? 1 : day === 1 ? 7 : (8 - day) % 7 || 7;
@@ -106,8 +115,8 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     expect(available).toBe(true);
   });
 
-  it("impide doble reserva en la misma bahía (exclusión DB)", async () => {
-    const turno1 = await createTurno({
+  it("impide doble reserva en la misma bahía", async () => {
+    await createTurno({
       empresaId,
       tallerId,
       bahiaId,
@@ -117,8 +126,6 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       inicio: slotInicio,
       confirmar: true,
     });
-
-    expect(turno1.id).toBeTruthy();
 
     const overlapStart = addMinutes(slotInicio, 30);
     await expect(
@@ -140,8 +147,48 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     });
   });
 
-  it("permite turno simultáneo en otra bahía", async () => {
-    const slot2 = addMinutes(slotInicio, 120);
+  it("auto-asigna bahía cuando hay exactamente una compatible disponible", async () => {
+    const slot = addMinutes(slotInicio, 180);
+    const fin = addMinutes(slot, 75);
+
+    await blockBahia({
+      empresaId,
+      bahiaId,
+      inicio: slot,
+      fin,
+    });
+    await blockBahia({
+      empresaId,
+      bahiaId: bahia2Id,
+      inicio: slot,
+      fin,
+    });
+
+    const result = await resolveBahiaAssignment({
+      tallerId,
+      servicioIds: [servicioId],
+      inicio: slot,
+      fin,
+    });
+    expect(result.autoAssigned).toBe(true);
+    expect(result.bahiaId).toBe(bahia3Id);
+  });
+
+  it("exige selección explícita con varias bahías disponibles", async () => {
+    const slot = addMinutes(slotInicio, 300);
+    const fin = addMinutes(slot, 75);
+    await expect(
+      resolveBahiaAssignment({
+        tallerId,
+        servicioIds: [servicioId],
+        inicio: slot,
+        fin,
+      })
+    ).rejects.toMatchObject({ code: "BAY_REQUIRED" });
+  });
+
+  it("vence pendientes automáticamente al pasar hora de inicio", async () => {
+    const past = addMinutes(new Date(), -120);
     const turno = await createTurno({
       empresaId,
       tallerId,
@@ -149,14 +196,20 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       clienteId,
       vehiculoId,
       servicioIds: [servicioId],
-      inicio: slot2,
-      confirmar: true,
+      inicio: past,
     });
-    expect(turno.bahiaId).toBe(bahia2Id);
+
+    expect(turno.estado).toBe(EstadoTurno.pendiente);
+
+    const count = await expirePendingTurnos(empresaId);
+    expect(count).toBeGreaterThanOrEqual(1);
+
+    const updated = await prisma.turno.findUnique({ where: { id: turno.id } });
+    expect(updated?.estado).toBe(EstadoTurno.vencido);
   });
 
   it("impide bloqueo superpuesto", async () => {
-    const blockStart = addMinutes(slotInicio, 240);
+    const blockStart = addMinutes(slotInicio, 420);
     await blockBahia({
       empresaId,
       bahiaId,
@@ -184,8 +237,7 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
     });
 
     expect(availability.length).toBe(1);
-    const slots = availability[0].slots;
-    const hasConflictSlot = slots.some(
+    const hasConflictSlot = availability[0].slots.some(
       (s) => s.inicio.getTime() === slotInicio.getTime()
     );
     expect(hasConflictSlot).toBe(false);

@@ -9,6 +9,7 @@ import {
   VALID_TRANSITIONS,
   ORIGEN_LABELS,
   canTransition,
+  formatPrecioSnapshot,
 } from "@/lib/modules/appointments/constants";
 import { TurnoActions } from "@/components/turnos/TurnoActions";
 import { EstadoTurno } from "@prisma/client";
@@ -98,7 +99,8 @@ export default async function TurnoDetailPage({
               >
                 <span>{d.nombreSnapshot}</span>
                 <span className="text-slate-600">
-                  {d.duracionMin} min · ${Number(d.precioSnapshot).toLocaleString("es-AR")}
+                  {d.duracionMin} min ·{" "}
+                  {formatPrecioSnapshot(Number(d.precioSnapshot), d.modoPrecioSnapshot)}
                 </span>
               </li>
             ))}

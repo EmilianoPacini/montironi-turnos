@@ -1,4 +1,4 @@
-import { PrismaClient, DiaSemana, EstadoTurno, OrigenTurno, RolUsuario } from "@prisma/client";
+import { PrismaClient, DiaSemana, EstadoTurno, OrigenTurno, RolUsuario, ModoPrecio } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { addHours, addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 
@@ -42,10 +42,6 @@ async function main() {
     },
   });
 
-  await prisma.configuracionTurnos.create({
-    data: { empresaId: empresa.id, margenMin: 15 },
-  });
-
   const adminHash = await hashPassword("admin123");
   const empleadoHash = await hashPassword("empleado123");
 
@@ -87,6 +83,13 @@ async function main() {
       nombre: "Taller Norte",
       direccion: "Av. del Libertador 5678",
     },
+  });
+
+  await prisma.configuracionTurnos.create({
+    data: { tallerId: tallerCentro.id, margenMin: 15 },
+  });
+  await prisma.configuracionTurnos.create({
+    data: { tallerId: tallerNorte.id, margenMin: 20 },
   });
 
   const bahiasCentro = await Promise.all(
@@ -143,6 +146,7 @@ async function main() {
         nombre: "Cambio de aceite",
         duracionMin: 45,
         precio: 85000,
+        modoPrecio: ModoPrecio.fijo,
       },
     }),
     prisma.servicio.create({
@@ -152,6 +156,7 @@ async function main() {
         nombre: "Frenos - revisión",
         duracionMin: 60,
         precio: 120000,
+        modoPrecio: ModoPrecio.desde,
       },
     }),
     prisma.servicio.create({
@@ -161,6 +166,7 @@ async function main() {
         nombre: "Service 10.000 km",
         duracionMin: 90,
         precio: 180000,
+        modoPrecio: ModoPrecio.fijo,
       },
     }),
     prisma.servicio.create({
@@ -170,6 +176,7 @@ async function main() {
         nombre: "Alineación y balanceo",
         duracionMin: 60,
         precio: 95000,
+        modoPrecio: ModoPrecio.a_presupuestar,
       },
     }),
   ]);
@@ -262,6 +269,7 @@ async function main() {
             nombreSnapshot: s.nombre,
             duracionMin: s.duracionMin,
             precioSnapshot: s.precio,
+            modoPrecioSnapshot: s.modoPrecio,
             orden: i,
           })),
         },

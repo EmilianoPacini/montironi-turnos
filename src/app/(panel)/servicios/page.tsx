@@ -27,6 +27,7 @@ export default async function ServiciosPage() {
               <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Duración</th>
               <th className="px-4 py-3">Precio</th>
+              <th className="px-4 py-3">Modo</th>
             </tr>
           </thead>
           <tbody>
@@ -36,6 +37,7 @@ export default async function ServiciosPage() {
                 <td className="px-4 py-3">{s.tipoServicio.nombre}</td>
                 <td className="px-4 py-3">{s.duracionMin} min</td>
                 <td className="px-4 py-3">${Number(s.precio).toLocaleString("es-AR")}</td>
+                <td className="px-4 py-3 capitalize">{s.modoPrecio.replace("_", " ")}</td>
               </tr>
             ))}
           </tbody>
@@ -52,6 +54,13 @@ export default async function ServiciosPage() {
         <label className="block text-sm"><span className="mb-1 block font-medium">Nombre</span><input name="nombre" required className="w-full rounded-lg border px-3 py-2" /></label>
         <label className="block text-sm"><span className="mb-1 block font-medium">Descripción</span><input name="descripcion" className="w-full rounded-lg border px-3 py-2" /></label>
         <label className="block text-sm"><span className="mb-1 block font-medium">Duración (min)</span><input name="duracionMin" type="number" required defaultValue={60} className="w-full rounded-lg border px-3 py-2" /></label>
+        <label className="block text-sm"><span className="mb-1 block font-medium">Modo de precio</span>
+          <select name="modoPrecio" defaultValue="fijo" className="w-full rounded-lg border px-3 py-2">
+            <option value="fijo">Precio fijo</option>
+            <option value="desde">Desde</option>
+            <option value="a_presupuestar">A presupuestar</option>
+          </select>
+        </label>
         <label className="block text-sm"><span className="mb-1 block font-medium">Precio</span><input name="precio" type="number" required defaultValue={100000} className="w-full rounded-lg border px-3 py-2" /></label>
         <button type="submit" className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white">Crear servicio</button>
       </form>

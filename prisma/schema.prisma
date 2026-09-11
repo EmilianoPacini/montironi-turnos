@@ -54,6 +54,12 @@ enum TipoExcepcion {
   horario_especial
 }
 
+enum ModoPrecio {
+  fijo
+  desde
+  a_presupuestar
+}
+
 model Empresa {
   id        String   @id @default(cuid())
   nombre    String
@@ -69,7 +75,6 @@ model Empresa {
   clientes             Cliente[]
   vehiculos            Vehiculo[]
   turnos               Turno[]
-  configuracionTurnos  ConfiguracionTurnos?
   agentesIa            AgenteIa[]
   operacionesApi       OperacionApi[]
 
@@ -110,6 +115,7 @@ model Taller {
   patronesHorario  PatronHorario[]
   excepciones      ExcepcionHorario[]
   turnos           Turno[]
+  configuracion    ConfiguracionTurnos?
 
   @@map("taller")
 }
@@ -151,9 +157,10 @@ model Servicio {
   tipoServicioId String   @map("tipo_servicio_id")
   nombre         String
   descripcion    String?
-  duracionMin    Int      @map("duracion_min")
-  precio         Decimal  @db.Decimal(10, 2)
-  activo         Boolean  @default(true)
+  duracionMin    Int        @map("duracion_min")
+  precio         Decimal    @db.Decimal(10, 2)
+  modoPrecio     ModoPrecio @default(fijo) @map("modo_precio")
+  activo         Boolean    @default(true)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -233,10 +240,10 @@ model ExcepcionHorario {
 
 model ConfiguracionTurnos {
   id        String @id @default(cuid())
-  empresaId String @unique @map("empresa_id")
+  tallerId  String @unique @map("taller_id")
   margenMin Int    @default(15) @map("margen_min")
 
-  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
 
   @@map("configuracion_turnos")
 }
@@ -346,9 +353,10 @@ model DetalleTurno {
   turnoId       String  @map("turno_id")
   servicioId    String  @map("servicio_id")
   nombreSnapshot String @map("nombre_snapshot")
-  duracionMin   Int     @map("duracion_min")
-  precioSnapshot Decimal @map("precio_snapshot") @db.Decimal(10, 2)
-  orden         Int     @default(0)
+  duracionMin        Int        @map("duracion_min")
+  precioSnapshot     Decimal    @map("precio_snapshot") @db.Decimal(10, 2)
+  modoPrecioSnapshot ModoPrecio @default(fijo) @map("modo_precio_snapshot")
+  orden              Int        @default(0)
 
   turno    Turno    @relation(fields: [turnoId], references: [id], onDelete: Cascade)
   servicio Servicio @relation(fields: [servicioId], references: [id])

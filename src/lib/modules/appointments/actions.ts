@@ -15,7 +15,7 @@ import {
   AppointmentError,
 } from "@/lib/modules/appointments/service";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
-import { updateConfiguracion, createServicio } from "@/lib/modules/catalog/service";
+import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
 
 function handleFormError(e: unknown): never {
   if (e instanceof AppointmentError) {
@@ -34,7 +34,7 @@ export async function createTurnoAction(formData: FormData): Promise<void> {
     await createTurno({
       empresaId: session.empresaId,
       tallerId: String(formData.get("tallerId")),
-      bahiaId: String(formData.get("bahiaId")),
+      bahiaId: String(formData.get("bahiaId") ?? "") || undefined,
       clienteId: String(formData.get("clienteId")),
       vehiculoId: String(formData.get("vehiculoId")),
       servicioIds,
@@ -121,7 +121,7 @@ export async function rescheduleTurnoAction(formData: FormData): Promise<void> {
     await rescheduleTurno({
       turnoId,
       empresaId: session.empresaId,
-      bahiaId: String(formData.get("bahiaId")),
+      bahiaId: String(formData.get("bahiaId") ?? "") || undefined,
       inicio: new Date(String(formData.get("inicio"))),
       version: Number(formData.get("version")),
       usuarioId: session.userId,
@@ -217,6 +217,7 @@ export async function saveServicioAction(formData: FormData): Promise<void> {
       descripcion: String(formData.get("descripcion") ?? "") || undefined,
       duracionMin: Number(formData.get("duracionMin")),
       precio: Number(formData.get("precio")),
+      modoPrecio: String(formData.get("modoPrecio") ?? "fijo") as "fijo" | "desde" | "a_presupuestar",
     });
     revalidatePath("/servicios");
     redirect("/servicios");
@@ -230,7 +231,10 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
     const session = await requireSession();
     if (session.rol !== "ADMIN") redirect("/agenda");
 
-    await updateConfiguracion(session.empresaId, Number(formData.get("margenMin")));
+    await updateConfiguracionTaller(
+      String(formData.get("tallerId")),
+      Number(formData.get("margenMin"))
+    );
     revalidatePath("/configuracion");
     redirect("/configuracion");
   } catch (e) {
