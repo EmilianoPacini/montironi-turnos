@@ -153,7 +153,35 @@ export async function crearTurnoPendiente(input: Omit<CreateTurnoInput, "confirm
   return createTurno({ ...input, confirmar: false });
 }
 
+async function assertCreateTurnoTenantScope(input: CreateTurnoInput) {
+  const [cliente, vehiculo, taller, link] = await Promise.all([
+    prisma.cliente.findFirst({
+      where: { id: input.clienteId, empresaId: input.empresaId },
+    }),
+    prisma.vehiculo.findFirst({
+      where: { id: input.vehiculoId, empresaId: input.empresaId },
+    }),
+    prisma.taller.findFirst({
+      where: { id: input.tallerId, empresaId: input.empresaId },
+    }),
+    prisma.clienteVehiculo.findFirst({
+      where: {
+        clienteId: input.clienteId,
+        vehiculoId: input.vehiculoId,
+        cliente: { empresaId: input.empresaId },
+        vehiculo: { empresaId: input.empresaId },
+      },
+    }),
+  ]);
+
+  if (!cliente || !vehiculo || !taller || !link) {
+    throw new DomainError("Recurso no encontrado", "RecursoNoEncontrado");
+  }
+}
+
 export async function createTurno(input: CreateTurnoInput) {
+  await assertCreateTurnoTenantScope(input);
+
   const { duracionMin, servicios } = await calcularDuracionTotal({
     empresaId: input.empresaId,
     tallerId: input.tallerId,

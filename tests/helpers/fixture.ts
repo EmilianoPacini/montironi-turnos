@@ -13,6 +13,7 @@ export interface TestFixture {
   clienteId: string;
   vehiculoId: string;
   servicioId: string;
+  tipoServicioId: string;
   slotInicio: Date;
   userId?: string;
 }
@@ -123,6 +124,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
     clienteId: cliente.id,
     vehiculoId: vehiculo.id,
     servicioId: servicio.id,
+    tipoServicioId: tipo.id,
     slotInicio,
     userId: usuario.id,
   };

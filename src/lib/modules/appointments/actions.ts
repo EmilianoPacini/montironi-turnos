@@ -368,10 +368,11 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
       redirect("/agenda");
     }
 
-    await updateConfiguracionTaller(
-      String(formData.get("tallerId")),
-      Number(formData.get("margenMinutos"))
-    );
+    await updateConfiguracionTaller({
+      tallerId: String(formData.get("tallerId")),
+      empresaId: session.empresaId,
+      margenMinutos: Number(formData.get("margenMinutos")),
+    });
     revalidatePath("/configuracion");
     redirect("/configuracion");
   } catch (e) {
