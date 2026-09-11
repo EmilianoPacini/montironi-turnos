@@ -85,6 +85,12 @@ Swap atómico; conflicto deja original intacto.
 
 Headers mutadores: cookie de sesión (panel), `Idempotency-Key`, body/header `version` en mutaciones de turno.
 
+**POST `/api/v1/turnos/{id}/transiciones`** — body JSON:
+- `estado` (canónico): destino FSM, ej. `"recibido"`, `"finalizado"`
+- `nuevoEstado` (alias legacy, opcional si viene `estado`)
+- `version` (requerido) o header `If-Match` / `x-turno-version`
+- `detalle` (opcional)
+
 ## Orden de implementación
 
 1. Migraciones 001 (+ patch bloqueos)
