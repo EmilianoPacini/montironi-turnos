@@ -79,11 +79,21 @@ describe("QA-1/2 · Ocupación como hold de capacidad", () => {
       inicio,
     });
 
+    const beforeCount = await prisma.ocupacionBahia.count({
+      where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },
+    });
+    expect(beforeCount).toBe(1);
+
     await confirmTurno({
       turnoId: turno.id,
       empresaId: fx.empresaId,
       version: turno.version,
     });
+
+    const afterCount = await prisma.ocupacionBahia.count({
+      where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },
+    });
+    expect(afterCount).toBe(1);
 
     const occ = await prisma.ocupacionBahia.findFirst({
       where: { turnoId: turno.id, activo: true, tipo: TipoOcupacion.turno },

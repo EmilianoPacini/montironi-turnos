@@ -8,6 +8,8 @@ import {
   getMargenMin,
 } from "@/lib/modules/availability/service";
 import { canTransition, isActiveEstado } from "@/lib/modules/appointments/constants";
+import { shouldLiberateOcupacion } from "@/lib/modules/agenda/domain/policies";
+import { turnoRepository } from "@/lib/modules/agenda/infrastructure/turno.repository";
 import { AppointmentError, DomainError } from "@/lib/modules/appointments/errors";
 
 export { AppointmentError, DomainError, isDomainError, httpStatusForDomainError } from "@/lib/modules/appointments/errors";
@@ -294,6 +296,9 @@ export async function confirmTurno(params: {
 
   return prisma.$transaction(async (tx) => {
     await refreshOcupacionTurno(tx, turno);
+    if (turno.estado === EstadoTurno.pendiente) {
+      await turnoRepository.freezeSnapshots(tx, turno.id, params.empresaId);
+    }
     return transitionTurno({
       turno,
       nuevoEstado: EstadoTurno.confirmado,
@@ -475,6 +480,19 @@ export async function transitionTurnoState(params: {
       version: params.version,
       usuarioId: params.usuarioId,
       motivo: params.detalle,
+    });
+  }
+
+  if (shouldLiberateOcupacion(params.nuevoEstado)) {
+    return prisma.$transaction(async (tx) => {
+      await liberateOcupacionTurno(tx, turno.id);
+      return transitionTurno({
+        turno,
+        nuevoEstado: params.nuevoEstado,
+        usuarioId: params.usuarioId,
+        detalle: params.detalle,
+        tx,
+      });
     });
   }
 

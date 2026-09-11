@@ -68,7 +68,8 @@ Monolito modular en Next.js App Router:
 - `src/lib/modules/auth` — sesión email/contraseña (iron-session)
 - `src/lib/modules/catalog` — servicios, talleres, configuración
 - `src/lib/modules/availability` — cálculo de disponibilidad (sin store de slots libres)
-- `src/lib/modules/appointments` — turnos, estados, bloqueos, reprogramación
+- `src/lib/modules/agenda` — dominio/aplicación/infra (casos de uso + repos)
+- `src/lib/modules/appointments` — implementación de turnos (delegada desde agenda)
 - `src/lib/modules/customers` — clientes y vehículos
 - `src/lib/modules/agents-api` — idempotencia y autenticación por API key
 
@@ -90,7 +91,9 @@ Para resetear desde cero: `npx prisma migrate reset --force`
 
 ### Capacidad
 
-Un turno ocupa una bahía desde `inicio` hasta `finaliza_en` (calculado como arriba).
+Un turno ocupa una bahía desde `inicio` hasta `finaliza_en` (calculado como arriba). **Hold en pendiente:** crear turno pendiente inserta `ocupacion_bahia` activa; confirmar mantiene; cancelar/vencer libera.
+
+Ver contrato completo en [`docs/DOMAIN_SERVICES.md`](docs/DOMAIN_SERVICES.md).
 
 - Consultar disponibilidad **no reserva**
 - Al confirmar/crear se revalida y se inserta en `ocupacion_bahia`
@@ -119,6 +122,24 @@ Acciones POST (`action` en body):
 - `upsert_cliente`, `upsert_vehiculo`
 
 GET `?resource=servicios|disponibilidad|turno`
+
+## API v1 (dominio agenda)
+
+Sesión de panel (cookie). Mutaciones aceptan `Idempotency-Key` y `x-turno-version` / `If-Match`.
+
+| Método | Ruta |
+|--------|------|
+| GET | `/api/v1/talleres/{tallerId}/agenda?fecha=` |
+| GET | `/api/v1/talleres/{tallerId}/disponibilidad?servicioId=&fecha=` |
+| POST | `/api/v1/turnos` |
+| POST | `/api/v1/turnos/{id}/confirmar` |
+| POST | `/api/v1/turnos/{id}/transiciones` |
+| POST | `/api/v1/turnos/{id}/reprogramar` |
+| POST | `/api/v1/turnos/{id}/cancelar` |
+| POST | `/api/v1/bahias/{bahiaId}/bloqueos` |
+| DELETE | `/api/v1/bloqueos/{ocupacionId}` |
+
+Capas: `src/lib/modules/agenda/{domain,application,infrastructure}` — ver `docs/DOMAIN_SERVICES.md`.
 
 ## Tests
 
