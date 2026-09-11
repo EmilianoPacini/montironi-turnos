@@ -1,0 +1,57 @@
+"use client";
+
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { removeBlockAction } from "@/lib/modules/appointments/actions";
+
+export function BlockTile({
+  blockId,
+  top,
+  height,
+  motivo,
+}: {
+  blockId: string;
+  top: number;
+  height: number;
+  motivo?: string | null;
+}) {
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function handleRemove(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("¿Quitar este bloqueo de bahía?")) return;
+    startTransition(async () => {
+      const result = await removeBlockAction(blockId);
+      if (result && "error" in result) {
+        alert(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <div
+      className="absolute inset-x-1 rounded border border-slate-400 bg-slate-200 px-2 py-1 text-xs text-slate-700"
+      style={{ top, height: Math.max(height, 24) }}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <div>
+          <span className="font-semibold">Bloqueado</span>
+          {motivo ? ` · ${motivo}` : ""}
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleRemove}
+          className="shrink-0 rounded px-1 text-[10px] font-semibold text-slate-600 underline hover:text-slate-900 disabled:opacity-50"
+          title="Quitar bloqueo"
+        >
+          Quitar
+        </button>
+      </div>
+    </div>
+  );
+}

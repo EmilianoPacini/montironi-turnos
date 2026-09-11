@@ -4,6 +4,7 @@ import { parseISO, startOfDay, addHours } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { blockBahiaAction } from "@/lib/modules/appointments/actions";
+import { FormError } from "@/components/ui/FormError";
 
 export default async function BloquearPage({
   searchParams,
@@ -21,6 +22,7 @@ export default async function BloquearPage({
     typeof params.fecha === "string" ? params.fecha : new Date().toISOString().slice(0, 10);
   const date = startOfDay(parseISO(dateStr));
   const bahias = talleres.find((t) => t.id === tallerId)?.bahias ?? [];
+  const error = typeof params.error === "string" ? params.error : undefined;
 
   const inicioDefault = addHours(date, 12).toISOString().slice(0, 16);
   const finDefault = addHours(date, 13).toISOString().slice(0, 16);
@@ -31,6 +33,12 @@ export default async function BloquearPage({
         ← Volver a agenda
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Bloquear bahía</h1>
+      <p className="mt-1 text-sm text-slate-600">
+        Crea una ocupación tipo bloqueo (sin turno ficticio). Los solapamientos activos se
+        rechazan.
+      </p>
+
+      <FormError message={error} />
 
       <form action={blockBahiaAction} className="mt-6 max-w-md space-y-4">
         <label className="block text-sm">

@@ -17,23 +17,36 @@ import {
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
 import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
 
-function handleFormError(e: unknown): never {
+function redirectWithError(path: string, message: string): never {
+  const sep = path.includes("?") ? "&" : "?";
+  redirect(`${path}${sep}error=${encodeURIComponent(message)}`);
+}
+
+function handleFormError(e: unknown, returnPath: string): never {
   if (e instanceof AppointmentError) {
-    redirect(`/error?message=${encodeURIComponent(e.message)}`);
+    redirectWithError(returnPath, e.message);
   }
   if (e instanceof Error && e.message === "UNAUTHORIZED") redirect("/login");
   throw e;
 }
 
 export async function createTurnoAction(formData: FormData): Promise<void> {
+  const tallerId = String(formData.get("tallerId"));
+  const returnPath = `/turnos/nuevo?tallerId=${tallerId}`;
+
   try {
     const session = await requireSession();
     const servicioIds = formData.getAll("servicioIds").map(String);
+
+    if (servicioIds.length === 0) {
+      redirectWithError(returnPath, "Seleccioná al menos un servicio");
+    }
+
     const inicioStr = String(formData.get("inicio"));
 
     await createTurno({
       empresaId: session.empresaId,
-      tallerId: String(formData.get("tallerId")),
+      tallerId,
       bahiaId: String(formData.get("bahiaId") ?? "") || undefined,
       clienteId: String(formData.get("clienteId")),
       vehiculoId: String(formData.get("vehiculoId")),
@@ -47,7 +60,7 @@ export async function createTurnoAction(formData: FormData): Promise<void> {
     revalidatePath("/agenda");
     redirect("/agenda");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, returnPath);
   }
 }
 
@@ -115,9 +128,11 @@ export async function cancelTurnoAction(turnoId: string, version: number, motivo
 }
 
 export async function rescheduleTurnoAction(formData: FormData): Promise<void> {
+  const turnoId = String(formData.get("turnoId"));
+  const returnPath = `/turnos/${turnoId}/reprogramar`;
+
   try {
     const session = await requireSession();
-    const turnoId = String(formData.get("turnoId"));
     await rescheduleTurno({
       turnoId,
       empresaId: session.empresaId,
@@ -129,16 +144,19 @@ export async function rescheduleTurnoAction(formData: FormData): Promise<void> {
     revalidatePath("/agenda");
     redirect(`/turnos/${turnoId}`);
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, returnPath);
   }
 }
 
 export async function blockBahiaAction(formData: FormData): Promise<void> {
+  const bahiaId = String(formData.get("bahiaId"));
+  const returnPath = `/agenda/bloquear?bahiaId=${bahiaId}`;
+
   try {
     const session = await requireSession();
     await blockBahia({
       empresaId: session.empresaId,
-      bahiaId: String(formData.get("bahiaId")),
+      bahiaId,
       inicio: new Date(String(formData.get("inicio"))),
       fin: new Date(String(formData.get("fin"))),
       motivo: String(formData.get("motivo") ?? "") || undefined,
@@ -147,7 +165,7 @@ export async function blockBahiaAction(formData: FormData): Promise<void> {
     revalidatePath("/agenda");
     redirect("/agenda");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, returnPath);
   }
 }
 
@@ -164,9 +182,11 @@ export async function removeBlockAction(blockId: string) {
 }
 
 export async function saveClienteAction(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "") || undefined;
+  const returnPath = id ? `/clientes/${id}/editar` : "/clientes/nuevo";
+
   try {
     const session = await requireSession();
-    const id = String(formData.get("id") ?? "") || undefined;
     await upsertCliente({
       id,
       empresaId: session.empresaId,
@@ -180,14 +200,18 @@ export async function saveClienteAction(formData: FormData): Promise<void> {
     revalidatePath("/clientes");
     redirect("/clientes");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, returnPath);
   }
 }
 
 export async function saveVehiculoAction(formData: FormData): Promise<void> {
+  const clienteId = String(formData.get("clienteId") ?? "") || undefined;
+  const returnPath = clienteId
+    ? `/clientes/${clienteId}/vehiculo/nuevo`
+    : "/clientes";
+
   try {
     const session = await requireSession();
-    const clienteId = String(formData.get("clienteId") ?? "") || undefined;
     await upsertVehiculo({
       empresaId: session.empresaId,
       patente: String(formData.get("patente")),
@@ -201,7 +225,7 @@ export async function saveVehiculoAction(formData: FormData): Promise<void> {
     if (clienteId) redirect(`/clientes/${clienteId}`);
     redirect("/clientes");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, returnPath);
   }
 }
 
@@ -222,7 +246,7 @@ export async function saveServicioAction(formData: FormData): Promise<void> {
     revalidatePath("/servicios");
     redirect("/servicios");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, "/servicios");
   }
 }
 
@@ -238,6 +262,6 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
     revalidatePath("/configuracion");
     redirect("/configuracion");
   } catch (e) {
-    handleFormError(e);
+    handleFormError(e, "/configuracion");
   }
 }

@@ -3,8 +3,7 @@ import { getAuthSession } from "@/lib/auth/session";
 import { listTalleres, serviciosForTaller } from "@/lib/modules/catalog/service";
 import { listClientes } from "@/lib/modules/customers/service";
 import { getAvailabilityForDate, getCompatibleBahias } from "@/lib/modules/availability/service";
-import { createTurnoAction } from "@/lib/modules/appointments/actions";
-import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
+import { NuevoTurnoForm } from "@/components/turnos/NuevoTurnoForm";
 import { format, parseISO, startOfDay } from "date-fns";
 
 export default async function NuevoTurnoPage({
@@ -28,6 +27,7 @@ export default async function NuevoTurnoPage({
   const servicios = await serviciosForTaller(tallerId, session.empresaId);
   const bahiaId = typeof params.bahiaId === "string" ? params.bahiaId : undefined;
   const inicioParam = typeof params.inicio === "string" ? params.inicio : undefined;
+  const error = typeof params.error === "string" ? params.error : undefined;
   const date = inicioParam ? startOfDay(parseISO(inicioParam)) : startOfDay(new Date());
 
   const compatibleBahias = await getCompatibleBahias(
@@ -42,110 +42,15 @@ export default async function NuevoTurnoPage({
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Nuevo turno</h1>
 
-      <form action={createTurnoAction} className="mt-6 max-w-2xl space-y-4">
-        <input type="hidden" name="tallerId" value={tallerId} />
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Cliente</span>
-          <select name="clienteId" required className="w-full rounded-lg border border-slate-300 px-3 py-2">
-            <option value="">Seleccionar...</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre} {c.apellido ?? ""} · {c.telefono ?? "sin tel"}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Vehículo</span>
-          <select name="vehiculoId" required className="w-full rounded-lg border border-slate-300 px-3 py-2">
-            <option value="">Seleccionar cliente primero</option>
-            {clientes.flatMap((c) =>
-              c.vehiculos.map((cv) => (
-                <option key={cv.vehiculoId} value={cv.vehiculoId}>
-                  {c.nombre}: {cv.vehiculo.patente}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium">Servicios</legend>
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-            {servicios.map((s) => (
-              <label key={s.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="servicioIds" value={s.id} />
-                <span>
-                  {s.nombre} ({s.duracionMin} min) ·{" "}
-                  {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Bahía</span>
-          <select
-            name="bahiaId"
-            defaultValue={bahiaId ?? ""}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">
-              Automático — asignar si hay exactamente una bahía compatible libre
-            </option>
-            {compatibleBahias.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nombre} (selección manual)
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Podés elegir una bahía manualmente en cualquier momento. Si dejás automático y
-            hay varias bahías libres, se pedirá selección explícita.
-          </p>
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Fecha y hora de inicio</span>
-          <input
-            type="datetime-local"
-            name="inicio"
-            required
-            defaultValue={
-              inicioParam
-                ? format(parseISO(inicioParam), "yyyy-MM-dd'T'HH:mm")
-                : format(new Date(), "yyyy-MM-dd'T'09:00")
-            }
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Notas</span>
-          <textarea
-            name="notas"
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="confirmar" value="true" />
-          Confirmar inmediatamente
-        </label>
-
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            Crear turno
-          </button>
-        </div>
-      </form>
+      <NuevoTurnoForm
+        tallerId={tallerId}
+        clientes={clientes}
+        servicios={servicios}
+        compatibleBahias={compatibleBahias}
+        defaultBahiaId={bahiaId}
+        defaultInicio={inicioParam}
+        error={error}
+      />
 
       <AvailabilityPreview
         empresaId={session.empresaId}

@@ -8,8 +8,10 @@ import { getAgendaForDate } from "@/lib/modules/availability/service";
 import { expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { AgendaGrid } from "@/components/agenda/AgendaGrid";
 import { AgendaToolbar } from "@/components/agenda/AgendaToolbar";
+import { CalendarLegend } from "@/components/agenda/CalendarLegend";
 import { TurnoCard } from "@/components/turnos/TurnoCard";
 import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
+import { buildAgendaQuery } from "@/lib/agenda-query";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function AgendaPage({
@@ -18,7 +20,6 @@ export default async function AgendaPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await getAuthSession();
-  
 
   const params = await searchParams;
   const talleres = await listTalleres(session.empresaId);
@@ -58,12 +59,13 @@ export default async function AgendaPage({
   if (canalFilter) turnos = turnos.filter((t) => t.canal === canalFilter);
   if (pendientes) turnos = turnos.filter((t) => t.estado === EstadoTurno.pendiente);
 
-  const queryBase = new URLSearchParams();
-  queryBase.set("taller", tallerId);
-  queryBase.set("fecha", dateStr);
-  if (estadoFilter) queryBase.set("estado", estadoFilter);
-  if (canalFilter) queryBase.set("canal", canalFilter);
-  if (pendientes) queryBase.set("pendientes", "1");
+  const baseQuery = buildAgendaQuery({
+    tallerId,
+    dateStr,
+    estado: estadoFilter,
+    canal: canalFilter,
+    pendientes,
+  });
 
   return (
     <div className="p-6 lg:p-8">
@@ -92,9 +94,11 @@ export default async function AgendaPage({
 
       <AgendaToolbar talleres={talleres} tallerId={tallerId} dateStr={dateStr} />
 
+      <CalendarLegend isClosed={agenda.isClosed} />
+
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href={`/agenda?${queryBase.toString()}&vista=grid`}
+          href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: estadoFilter, canal: canalFilter, pendientes, vista: "grid" }).toString()}`}
           className={`rounded-lg px-3 py-2 text-sm font-medium ${
             vista === "grid" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
           }`}
@@ -102,7 +106,7 @@ export default async function AgendaPage({
           Grilla
         </Link>
         <Link
-          href={`/agenda?${queryBase.toString()}&vista=lista`}
+          href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: estadoFilter, canal: canalFilter, pendientes, vista: "lista" }).toString()}`}
           className={`rounded-lg px-3 py-2 text-sm font-medium ${
             vista === "lista" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
           }`}
@@ -110,7 +114,7 @@ export default async function AgendaPage({
           Lista
         </Link>
         <Link
-          href={`/agenda?${queryBase.toString()}&pendientes=1`}
+          href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: estadoFilter, canal: canalFilter, pendientes: !pendientes }).toString()}`}
           className={`rounded-lg px-3 py-2 text-sm font-medium ${
             pendientes ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-900"
           }`}
@@ -119,7 +123,13 @@ export default async function AgendaPage({
         </Link>
       </div>
 
-      <AgendaFilters queryBase={queryBase.toString()} estado={estadoFilter} canal={canalFilter} />
+      <AgendaFilters
+        tallerId={tallerId}
+        dateStr={dateStr}
+        estado={estadoFilter}
+        canal={canalFilter}
+        pendientes={pendientes}
+      />
 
       {vista === "lista" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -132,10 +142,12 @@ export default async function AgendaPage({
       ) : (
         <AgendaGrid
           date={date}
+          tallerId={tallerId}
           bahias={agenda.bahias}
           turnos={turnos}
           bloqueos={agenda.bloqueos}
           isClosed={agenda.isClosed}
+          schedule={agenda.schedule}
         />
       )}
     </div>
@@ -143,13 +155,17 @@ export default async function AgendaPage({
 }
 
 function AgendaFilters({
-  queryBase,
+  tallerId,
+  dateStr,
   estado,
   canal,
+  pendientes,
 }: {
-  queryBase: string;
+  tallerId: string;
+  dateStr: string;
   estado?: EstadoTurno;
   canal?: CanalTurno;
+  pendientes: boolean;
 }) {
   const estados: { value: EstadoTurno; label: string }[] = [
     { value: EstadoTurno.pendiente, label: "Pendiente" },
@@ -157,51 +173,75 @@ function AgendaFilters({
     { value: EstadoTurno.recibido, label: "Recibido" },
     { value: EstadoTurno.en_servicio, label: "En servicio" },
     { value: EstadoTurno.finalizado, label: "Finalizado" },
+    { value: EstadoTurno.cancelado, label: "Cancelado" },
+    { value: EstadoTurno.vencido, label: "Vencido" },
+    { value: EstadoTurno.ausente, label: "Ausente" },
   ];
 
   const canales: CanalTurno[] = [
     CanalTurno.interno,
+    CanalTurno.web,
     CanalTurno.whatsapp,
     CanalTurno.telefono,
     CanalTurno.agente_ia,
   ];
 
   return (
-    <div className="mb-4 flex flex-wrap gap-2">
-      <Link
-        href={`/agenda?${queryBase.replace(/&?estado=[^&]*/g, "")}`}
-        className={`rounded-full px-3 py-1 text-xs font-medium ${
-          !estado ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
-        }`}
-      >
-        Todos
-      </Link>
-      {estados.map((e) => (
+    <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <span className="self-center text-xs font-medium text-slate-500">Estado:</span>
         <Link
-          key={e.value}
-          href={`/agenda?${queryBase}&estado=${e.value}`}
+          href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, canal, pendientes }).toString()}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            estado === e.value
-              ? "bg-slate-900 text-white"
-              : "bg-white text-slate-600 ring-1 ring-slate-200"
+            !estado ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
           }`}
         >
-          {e.label}
+          Todos
         </Link>
-      ))}
-      {canales.map((c) => (
+        {estados.map((e) => (
+          <Link
+            key={e.value}
+            href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado: e.value, canal, pendientes }).toString()}`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              estado === e.value
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-600 ring-1 ring-slate-200"
+            }`}
+          >
+            {e.label}
+          </Link>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <span className="self-center text-xs font-medium text-slate-500">Origen:</span>
         <Link
-          key={c}
-          href={`/agenda?${queryBase}&canal=${c}`}
+          href={`/agenda?${buildAgendaQuery({ tallerId, dateStr, estado, pendientes }).toString()}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            canal === c
-              ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 ring-1 ring-slate-200"
+            !canal ? "bg-indigo-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
           }`}
         >
-          {CANAL_LABELS[c]}
+          Todos
         </Link>
-      ))}
+        {canales.map((c) => (
+          <Link
+            key={c}
+            href={`/agenda?${buildAgendaQuery({
+              tallerId,
+              dateStr,
+              estado,
+              canal: canal === c ? undefined : c,
+              pendientes,
+            }).toString()}`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              canal === c
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-slate-600 ring-1 ring-slate-200"
+            }`}
+          >
+            {CANAL_LABELS[c]}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

@@ -7,15 +7,20 @@ import { listTalleres } from "@/lib/modules/catalog/service";
 import { getAvailabilityForDate } from "@/lib/modules/availability/service";
 import { rescheduleTurnoAction } from "@/lib/modules/appointments/actions";
 import { isActiveEstado } from "@/lib/modules/appointments/constants";
+import { FormError } from "@/components/ui/FormError";
 
 export default async function ReprogramarPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await getAuthSession();
 
   const { id } = await params;
+  const query = await searchParams;
+  const error = typeof query.error === "string" ? query.error : undefined;
   const turno = await getTurnoById(id, session.empresaId);
   if (!turno || !isActiveEstado(turno.estado)) notFound();
 
@@ -43,6 +48,8 @@ export default async function ReprogramarPage({
       <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
         Si hay conflicto, se mantiene el horario anterior.
       </p>
+
+      <FormError message={error} />
 
       <form action={rescheduleTurnoAction} className="mt-6 max-w-xl space-y-4">
         <input type="hidden" name="turnoId" value={turno.id} />

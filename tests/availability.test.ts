@@ -9,6 +9,7 @@ import {
   blockBahia,
   expirePendingTurnos,
   resolveBahiaAssignment,
+  rescheduleTurno,
   AppointmentError,
 } from "@/lib/modules/appointments/service";
 import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
@@ -271,5 +272,45 @@ describe("Disponibilidad y exclusión ocupacion_bahia", () => {
       (s) => s.inicio.getTime() === slotInicio.getTime()
     );
     expect(hasConflictSlot).toBe(false);
+  });
+
+  it("reprogramación con conflicto mantiene ocupación anterior", async () => {
+    const originalStart = addMinutes(slotInicio, 540);
+    const turno = await createTurno({
+      empresaId,
+      tallerId,
+      bahiaId,
+      clienteId,
+      vehiculoId,
+      servicioIds: [servicioId],
+      inicio: originalStart,
+      confirmar: true,
+    });
+
+    const conflictStart = addMinutes(originalStart, 180);
+    await blockBahia({
+      empresaId,
+      bahiaId,
+      inicio: conflictStart,
+      fin: addMinutes(conflictStart, 75),
+    });
+
+    await expect(
+      rescheduleTurno({
+        turnoId: turno.id,
+        empresaId,
+        inicio: conflictStart,
+        version: turno.version,
+      })
+    ).rejects.toMatchObject({ code: "RESCHEDULE_CONFLICT" });
+
+    const unchanged = await prisma.turno.findUnique({ where: { id: turno.id } });
+    expect(unchanged?.inicio.getTime()).toBe(originalStart.getTime());
+    expect(unchanged?.version).toBe(turno.version);
+
+    const activeOcc = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true },
+    });
+    expect(activeOcc?.inicio.getTime()).toBe(originalStart.getTime());
   });
 });
