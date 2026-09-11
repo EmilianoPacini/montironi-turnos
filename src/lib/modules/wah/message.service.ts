@@ -1,9 +1,4 @@
 import prisma from "@/lib/db";
-import {
-  WahMessageDirection,
-  WahMessageType,
-  WahSenderType,
-} from "@prisma/client";
 import { getWahConfig } from "@/lib/modules/wah/config";
 import { sendWhatsAppMedia, sendWhatsAppText } from "@/lib/modules/wah/meta-client";
 import { previewText } from "@/lib/modules/wah/phone";
@@ -12,6 +7,12 @@ import {
   getWhatsappAccountForEmpresa,
   touchConversationAfterMessage,
 } from "@/lib/modules/wah/conversation.service";
+import {
+  WAH_DIRECTION,
+  WAH_MESSAGE_TYPE,
+  WAH_SENDER_TYPE,
+  type WahMessageType,
+} from "@/lib/modules/wah/types";
 
 export async function sendHumanMessage(params: {
   empresaId: string;
@@ -26,7 +27,7 @@ export async function sendHumanMessage(params: {
   });
   if (!conversation) throw new Error("Conversación no encontrada");
 
-  const { waMessageId } = await sendWhatsAppText({
+  const { wamid } = await sendWhatsAppText({
     phoneNumberId: conversation.account.phoneNumberId,
     to: conversation.contactPhone,
     text: params.body,
@@ -37,16 +38,14 @@ export async function sendHumanMessage(params: {
       data: {
         empresaId: params.empresaId,
         conversationId: params.conversationId,
-        direction: WahMessageDirection.outbound,
-        senderType: params.generatedByAi ? WahSenderType.bot : WahSenderType.human,
-        messageType: WahMessageType.text,
+        direction: WAH_DIRECTION.outbound,
+        senderType: params.generatedByAi ? WAH_SENDER_TYPE.bot : WAH_SENDER_TYPE.human,
+        messageType: WAH_MESSAGE_TYPE.text,
         body: params.body,
-        waMessageId,
+        wamid,
+        senderUserId: params.userId,
         status: "sent",
-        metadata: {
-          sentByUserId: params.userId,
-          ...(params.generatedByAi ? { generatedByAi: true } : {}),
-        },
+        metadata: params.generatedByAi ? { generatedByAi: true } : undefined,
       },
     });
 
@@ -97,7 +96,7 @@ export async function sendIntegrationText(params: {
 
   if (!conversation) throw new Error("Conversación no encontrada");
 
-  const { waMessageId } = await sendWhatsAppText({
+  const { wamid } = await sendWhatsAppText({
     phoneNumberId: account.phoneNumberId,
     to: params.to,
     text: params.text,
@@ -107,11 +106,11 @@ export async function sendIntegrationText(params: {
     data: {
       empresaId: params.empresaId,
       conversationId: conversation.id,
-      direction: WahMessageDirection.outbound,
-      senderType: WahSenderType.integration,
-      messageType: WahMessageType.text,
+      direction: WAH_DIRECTION.outbound,
+      senderType: WAH_SENDER_TYPE.integration,
+      messageType: WAH_MESSAGE_TYPE.text,
       body: params.text,
-      waMessageId,
+      wamid,
       status: "sent",
       metadata: params.externalId ? { externalId: params.externalId } : undefined,
     },
@@ -119,7 +118,7 @@ export async function sendIntegrationText(params: {
 
   await touchConversationAfterMessage({
     conversationId: conversation.id,
-    direction: WahMessageDirection.outbound,
+    direction: WAH_DIRECTION.outbound,
     preview: params.text,
   });
 
@@ -137,7 +136,7 @@ export async function sendIntegrationAudio(params: {
 }) {
   return sendIntegrationMedia({
     ...params,
-    messageType: WahMessageType.audio,
+    messageType: WAH_MESSAGE_TYPE.audio,
     mediaType: "audio" as const,
     mediaUrl: params.audioUrl,
     body: params.filename ? `[audio: ${params.filename}]` : "[audio]",
@@ -160,7 +159,7 @@ export async function sendIntegrationFile(params: {
     to: params.to,
     contactName: params.contactName,
     conversationId: params.conversationId,
-    messageType: WahMessageType.file,
+    messageType: WAH_MESSAGE_TYPE.file,
     mediaType: "document" as const,
     mediaUrl: params.fileUrl,
     filename: params.filename,
@@ -198,7 +197,7 @@ async function sendIntegrationMedia(params: {
 
   if (!conversation) throw new Error("Conversación no encontrada");
 
-  const { waMessageId } = await sendWhatsAppMedia({
+  const { wamid } = await sendWhatsAppMedia({
     phoneNumberId: account.phoneNumberId,
     to: params.to,
     text: params.body,
@@ -212,11 +211,11 @@ async function sendIntegrationMedia(params: {
     data: {
       empresaId: params.empresaId,
       conversationId: conversation.id,
-      direction: WahMessageDirection.outbound,
-      senderType: WahSenderType.integration,
+      direction: WAH_DIRECTION.outbound,
+      senderType: WAH_SENDER_TYPE.integration,
       messageType: params.messageType,
       body: params.body,
-      waMessageId,
+      wamid,
       status: "sent",
       metadata: {
         mediaUrl: params.mediaUrl,
@@ -228,7 +227,7 @@ async function sendIntegrationMedia(params: {
 
   await touchConversationAfterMessage({
     conversationId: conversation.id,
-    direction: WahMessageDirection.outbound,
+    direction: WAH_DIRECTION.outbound,
     preview: params.body,
   });
 

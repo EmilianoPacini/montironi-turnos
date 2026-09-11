@@ -116,7 +116,7 @@ describe("WAH · Comunicaciones (Emi contract)", () => {
       empresaId: fx.empresaId,
       conversationId: conv.id,
       body: "Respuesta humana",
-      userId: fx.clienteId,
+      userId: fx.userId!,
     });
 
     const updated = await prisma.wahConversation.findUniqueOrThrow({ where: { id: conv.id } });
@@ -127,6 +127,7 @@ describe("WAH · Comunicaciones (Emi contract)", () => {
       orderBy: { createdAt: "desc" },
     });
     expect(outbound?.body).toBe("Respuesta humana");
+    expect(outbound?.senderUserId).toBe(fx.userId);
   });
 
   it("bot/resume → botPaused false en DB", async () => {
@@ -158,7 +159,7 @@ describe("WAH · Comunicaciones (Emi contract)", () => {
     });
 
     vi.spyOn(wahScope, "requireWahSession").mockResolvedValue({
-      userId: fx.clienteId,
+      userId: fx.userId!,
       empresaId: fx.empresaId,
       email: "test@test.com",
       nombre: "Test",

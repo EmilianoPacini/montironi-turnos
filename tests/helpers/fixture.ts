@@ -94,6 +94,15 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
     data: { clienteId: cliente.id, vehiculoId: vehiculo.id, esPrincipal: true },
   });
 
+  const usuario = await prisma.usuario.create({
+    data: {
+      empresaId: empresa.id,
+      email: `test-${suffix}@example.com`,
+      nombre: "Test User",
+      passwordHash: "hash",
+    },
+  });
+
   const today = new Date();
   const day = today.getDay();
   const daysUntilMonday = day === 0 ? 1 : day === 1 ? 7 : (8 - day) % 7 || 7;
@@ -111,6 +120,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
     vehiculoId: vehiculo.id,
     servicioId: servicio.id,
     slotInicio,
+    userId: usuario.id,
   };
 }
 

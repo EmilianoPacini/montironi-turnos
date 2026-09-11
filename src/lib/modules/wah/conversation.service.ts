@@ -1,10 +1,12 @@
 import prisma from "@/lib/db";
-import {
-  WahMessageDirection,
-  WahMessageType,
-  WahSenderType,
-} from "@prisma/client";
 import { normalizeContactPhone, previewText, toWaContactId } from "@/lib/modules/wah/phone";
+import {
+  WAH_DIRECTION,
+  WAH_MESSAGE_TYPE,
+  WAH_SENDER_TYPE,
+  type WahDirection,
+  type WahMessageType,
+} from "@/lib/modules/wah/types";
 
 export type ConversationFilter = "all" | "pending" | "unread";
 
@@ -131,7 +133,7 @@ export async function findOrCreateConversation(params: {
 
 export async function touchConversationAfterMessage(params: {
   conversationId: string;
-  direction: WahMessageDirection;
+  direction: WahDirection;
   preview: string;
   incrementUnread?: boolean;
   pendingHuman?: boolean;
@@ -146,7 +148,7 @@ export async function touchConversationAfterMessage(params: {
       lastMessageAt: new Date(),
       lastMessagePreview: previewText(params.preview),
       unreadCount:
-        params.incrementUnread && params.direction === WahMessageDirection.inbound
+        params.incrementUnread && params.direction === WAH_DIRECTION.inbound
           ? conv.unreadCount + 1
           : undefined,
       pendingHuman: params.pendingHuman,
@@ -183,27 +185,53 @@ export async function persistInboundMessage(params: {
   conversationId: string;
   body: string;
   messageType?: WahMessageType;
-  waMessageId?: string;
-  mediaId?: string;
+  wamid?: string;
   pendingHuman?: boolean;
+  media?: {
+    buffer: Buffer;
+    mimeType: string;
+    fileName: string;
+    metaMediaId?: string;
+    caption?: string;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+    voice?: boolean;
+  };
 }) {
   const message = await prisma.wahMessage.create({
     data: {
       empresaId: params.empresaId,
       conversationId: params.conversationId,
-      direction: WahMessageDirection.inbound,
-      senderType: WahSenderType.contact,
-      messageType: params.messageType ?? WahMessageType.text,
+      direction: WAH_DIRECTION.inbound,
+      senderType: WAH_SENDER_TYPE.contact,
+      messageType: params.messageType ?? WAH_MESSAGE_TYPE.text,
       body: params.body,
-      waMessageId: params.waMessageId,
-      mediaId: params.mediaId,
+      wamid: params.wamid,
       status: "received",
     },
   });
 
+  if (params.media) {
+    const { storeWahMedia } = await import("@/lib/modules/wah/media.service");
+    await storeWahMedia({
+      empresaId: params.empresaId,
+      messageId: message.id,
+      buffer: params.media.buffer,
+      mimeType: params.media.mimeType,
+      fileName: params.media.fileName,
+      metaMediaId: params.media.metaMediaId,
+      caption: params.media.caption,
+      width: params.media.width,
+      height: params.media.height,
+      durationMs: params.media.durationMs,
+      voice: params.media.voice,
+    });
+  }
+
   await touchConversationAfterMessage({
     conversationId: params.conversationId,
-    direction: WahMessageDirection.inbound,
+    direction: WAH_DIRECTION.inbound,
     preview: params.body || `[${params.messageType ?? "text"}]`,
     incrementUnread: true,
     pendingHuman: params.pendingHuman ?? true,
