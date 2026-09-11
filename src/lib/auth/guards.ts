@@ -1,7 +1,7 @@
 import { RolUsuario } from "@prisma/client";
 
 /** Routes restricted to admin in V1 (empleado: Agenda + Clientes only in nav). */
-export const ADMIN_ONLY_PATH_PREFIXES = ["/servicios", "/configuracion"] as const;
+export const ADMIN_ONLY_PATH_PREFIXES = ["/servicios", "/configuracion", "/usuarios"] as const;
 
 export function isAdminOnlyPath(pathname: string): boolean {
   return ADMIN_ONLY_PATH_PREFIXES.some(

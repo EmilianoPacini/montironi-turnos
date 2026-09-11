@@ -12,6 +12,16 @@ export async function listClientes(empresaId: string, search?: string) {
               { apellido: { contains: search, mode: "insensitive" } },
               { telefono: { contains: search } },
               { email: { contains: search, mode: "insensitive" } },
+              { documento: { contains: search, mode: "insensitive" } },
+              {
+                vehiculos: {
+                  some: {
+                    vehiculo: {
+                      patente: { contains: search, mode: "insensitive" },
+                    },
+                  },
+                },
+              },
             ],
           }
         : {}),

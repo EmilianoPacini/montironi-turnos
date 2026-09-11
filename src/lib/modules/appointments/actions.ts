@@ -193,16 +193,42 @@ export async function saveClienteAction(formData: FormData): Promise<void> {
 
   try {
     const session = await requireSession();
-    await upsertCliente({
+
+    const nombre = String(formData.get("nombre") ?? "").trim();
+    const apellido = String(formData.get("apellido") ?? "").trim();
+    const telefono = String(formData.get("telefono") ?? "").trim();
+    const documento = String(formData.get("documento") ?? "").trim();
+    const patente = String(formData.get("patente") ?? "").trim();
+
+    if (!nombre) {
+      redirectWithError(returnPath, "El nombre es obligatorio");
+    }
+    if (!id) {
+      if (!apellido) redirectWithError(returnPath, "El apellido es obligatorio");
+      if (!telefono) redirectWithError(returnPath, "El teléfono es obligatorio");
+      if (!documento) redirectWithError(returnPath, "El documento es obligatorio");
+      if (!patente) redirectWithError(returnPath, "La patente es obligatoria");
+    }
+
+    const cliente = await upsertCliente({
       id,
       empresaId: session.empresaId,
-      nombre: String(formData.get("nombre")),
-      apellido: String(formData.get("apellido") ?? "") || undefined,
+      nombre,
+      apellido: apellido || undefined,
       email: String(formData.get("email") ?? "") || undefined,
-      telefono: String(formData.get("telefono") ?? "") || undefined,
-      documento: String(formData.get("documento") ?? "") || undefined,
+      telefono: telefono || undefined,
+      documento: documento || undefined,
       notas: String(formData.get("notas") ?? "") || undefined,
     });
+
+    if (!id && patente) {
+      await upsertVehiculo({
+        empresaId: session.empresaId,
+        patente,
+        clienteId: cliente.id,
+      });
+    }
+
     revalidatePath("/clientes");
     redirect("/clientes");
   } catch (e) {

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
 import { format } from "date-fns";
 import { EstadoChip } from "./EstadoChip";
-import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
+import { formatTurnoOrigen } from "@/lib/modules/appointments/format-origen";
 
 interface TurnoCardProps {
   turno: {
@@ -21,10 +21,6 @@ interface TurnoCardProps {
 
 export function TurnoCard({ turno, compact }: TurnoCardProps) {
   const servicio = turno.detalles.map((d) => d.nombreSnapshot).join(", ");
-  const actor =
-    turno.canal === CanalTurno.interno
-      ? turno.creador?.nombre ?? "Panel"
-      : CANAL_LABELS[turno.canal];
 
   return (
     <Link
@@ -46,9 +42,7 @@ export function TurnoCard({ turno, compact }: TurnoCardProps) {
       {compact ? (
         <p className="mt-1 truncate text-xs text-slate-500">{servicio}</p>
       ) : null}
-      <p className="mt-1 text-xs text-slate-500">
-        {CANAL_LABELS[turno.canal]} · {actor}
-      </p>
+      <p className="mt-1 text-xs text-slate-500">{formatTurnoOrigen(turno)}</p>
     </Link>
   );
 }

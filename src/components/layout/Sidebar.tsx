@@ -7,6 +7,7 @@ const adminLinks = [
   { href: "/clientes", label: "Clientes" },
   { href: "/servicios", label: "Servicios" },
   { href: "/configuracion", label: "Configuración" },
+  { href: "/usuarios", label: "Usuarios" },
 ];
 
 const empleadoLinks = [

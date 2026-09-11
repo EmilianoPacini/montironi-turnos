@@ -9,7 +9,7 @@ import { expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { AgendaGrid } from "@/components/agenda/AgendaGrid";
 import { AgendaToolbar } from "@/components/agenda/AgendaToolbar";
 import { CalendarLegend } from "@/components/agenda/CalendarLegend";
-import { TurnoCard } from "@/components/turnos/TurnoCard";
+import { TurnoListTable } from "@/components/turnos/TurnoListTable";
 import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
 import { buildAgendaQuery } from "@/lib/agenda-query";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
@@ -132,13 +132,7 @@ export default async function AgendaPage({
       />
 
       {vista === "lista" ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {turnos.length === 0 ? (
-            <p className="col-span-full text-center text-slate-500">Sin turnos para mostrar</p>
-          ) : (
-            turnos.map((t) => <TurnoCard key={t.id} turno={t} />)
-          )}
-        </div>
+        <TurnoListTable turnos={turnos} />
       ) : (
         <AgendaGrid
           date={date}
