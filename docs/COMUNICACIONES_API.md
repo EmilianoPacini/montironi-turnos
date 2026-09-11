@@ -135,13 +135,40 @@ Binary stream. Requiere secret + query `empresa_id`.
 
 ---
 
+## Webhook inbound (Meta → Montironi)
+
+### `POST /api/webhooks/whatsapp/received-data`
+
+Auth: header `X-Cima-Forward-Secret` = env `CIMA_FORWARD_SECRET` (timing-safe). **401** si no coincide.
+
+Body: payload Meta Cloud API (`entry[].changes[].value`).
+
+Comportamiento:
+
+1. Lee `metadata.phone_number_id` → lookup `whatsapp_accounts` → **404** si no existe
+2. Mensajes inbound: idempotencia por `wamid`; persiste `wah_messages` + `wah_media.message_id` CASCADE
+3. Contacto en `wa_contact_id` / `contact_phone` (normalizado E.164)
+4. Statuses Meta: actualiza `wah_messages.status` por `wamid`
+5. Si `bot_paused=false` y `WAH_MESSAGE_WEBHOOK_URL`: forward POST a n8n (`event: inbound_message`)
+
+Response:
+
+```json
+{
+  "messages": [{ "wamid": "...", "messageId": "uuid", "skipped": false }],
+  "statuses": [{ "wamid": "...", "status": "delivered", "updated": 1 }]
+}
+```
+
+---
+
 ## Env
 
 | Variable | Uso |
 |----------|-----|
 | `CIMA_FORWARD_SECRET` | Auth integración |
 | `META_WHATSAPP_ACCESS_TOKEN` | Graph API (opcional dev) |
-| `WAH_MESSAGE_WEBHOOK_URL` | Webhook post-envío humano |
+| `WAH_MESSAGE_WEBHOOK_URL` | Webhook post-envío humano + inbound (cuando bot no pausado) |
 | `WAH_MEDIA_DIR` | Media inbound |
 | `WAH_SEND_FILES_DIR` | Media outbound |
 

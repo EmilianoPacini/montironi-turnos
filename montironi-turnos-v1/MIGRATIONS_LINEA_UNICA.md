@@ -52,4 +52,4 @@ Resultado esperado en branch limpio:
 
 ## DBs sucias (columna condicion)
 
-Si una DB legacy tiene `condicion_vehiculo` en lugar de `condicion`, aplicar `006_fix_intervalo_condicion.sql` desde el shared box (md5 `a06011fe8277a55c99f95c4ff8231799`). **No incluido en repo hasta republish Datos.**
+Si una DB legacy tiene `condicion_vehiculo` en lugar de `condicion`, aplicar `006_fix_intervalo_condicion.sql` desde el shared box (md5 `9cecaf43d8145ca46029a1d5f1d37d83`). Incluido en tip `d6d5fa9`+ (CONSTRAINT→INDEX).

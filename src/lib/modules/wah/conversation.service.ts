@@ -23,6 +23,12 @@ export async function getWhatsappAccountForEmpresa(accountId: string, empresaId:
   });
 }
 
+export async function findWhatsappAccountByPhoneNumberId(phoneNumberId: string) {
+  return prisma.whatsappAccount.findFirst({
+    where: { phoneNumberId, active: true },
+  });
+}
+
 export async function getWahDashboard(empresaId: string, accountId?: string) {
   const where = {
     empresaId,
