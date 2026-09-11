@@ -6,13 +6,12 @@ import { getAuthSession } from "@/lib/auth/session";
 import { getTurnoById, expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { EstadoChip } from "@/components/turnos/EstadoChip";
 import {
-  VALID_TRANSITIONS,
   CANAL_LABELS,
   canTransition,
   formatPrecioSnapshot,
 } from "@/lib/modules/appointments/constants";
 import { TurnoStateDropdown } from "@/components/turnos/TurnoStateDropdown";
-import { calcularProximoServicioKm } from "@/lib/modules/catalog/intervalo.service";
+import { getProximosKmForTurno } from "@/lib/modules/catalog/intervalo.service";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function TurnoDetailPage({
@@ -27,23 +26,11 @@ export default async function TurnoDetailPage({
   const turno = await getTurnoById(id, session.empresaId);
   if (!turno) notFound();
 
-  const transiciones = VALID_TRANSITIONS[turno.estado].filter(
-    (t) => t !== EstadoTurno.cancelado
-  );
-
-  const proximosKm = await Promise.all(
-    turno.detalles.map(async (d) => {
-      const km = turno.vehiculo.kilometrajeActual ?? turno.kilometraje;
-      if (km == null) return null;
-      const proximo = await calcularProximoServicioKm({
-        servicioId: d.servicioId,
-        tipoVehiculo: turno.vehiculo.tipoVehiculo,
-        condicion: turno.vehiculo.condicion,
-        kilometrajeActual: km,
-      });
-      return proximo != null ? { servicio: d.nombreSnapshot, proximoKm: proximo } : null;
-    })
-  );
+  const proximosKm = await getProximosKmForTurno({
+    detalles: turno.detalles,
+    vehiculo: turno.vehiculo,
+    turnoKilometraje: turno.kilometraje,
+  });
 
   return (
     <div className="p-6 lg:p-8">
@@ -137,13 +124,13 @@ export default async function TurnoDetailPage({
               </li>
             ))}
           </ul>
-          {proximosKm.filter(Boolean).length > 0 ? (
+          {proximosKm.length > 0 ? (
             <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
               <p className="font-medium">Próximo servicio por km</p>
               <ul className="mt-1 space-y-1">
-                {proximosKm.filter(Boolean).map((p) => (
-                  <li key={p!.servicio}>
-                    {p!.servicio}: {p!.proximoKm.toLocaleString("es-AR")} km
+                {proximosKm.map((p) => (
+                  <li key={p.servicio}>
+                    {p.servicio}: {p.proximoKm.toLocaleString("es-AR")} km
                   </li>
                 ))}
               </ul>

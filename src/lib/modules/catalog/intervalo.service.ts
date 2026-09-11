@@ -56,3 +56,35 @@ export async function calcularProximoServicioKm(params: {
   if (!intervalo) return null;
   return params.kilometrajeActual + intervalo.intervaloKm;
 }
+
+export interface ProximoKmEntry {
+  servicio: string;
+  proximoKm: number;
+}
+
+export async function getProximosKmForTurno(params: {
+  detalles: { servicioId: string; nombreSnapshot: string }[];
+  vehiculo: {
+    tipoVehiculo: TipoVehiculo;
+    condicion: CondicionVehiculo;
+    kilometrajeActual?: number | null;
+  };
+  turnoKilometraje?: number | null;
+}): Promise<ProximoKmEntry[]> {
+  const km = params.vehiculo.kilometrajeActual ?? params.turnoKilometraje;
+  if (km == null) return [];
+
+  const entries = await Promise.all(
+    params.detalles.map(async (d) => {
+      const proximo = await calcularProximoServicioKm({
+        servicioId: d.servicioId,
+        tipoVehiculo: params.vehiculo.tipoVehiculo,
+        condicion: params.vehiculo.condicion,
+        kilometrajeActual: km,
+      });
+      return proximo != null ? { servicio: d.nombreSnapshot, proximoKm: proximo } : null;
+    })
+  );
+
+  return entries.filter((entry): entry is ProximoKmEntry => entry != null);
+}
