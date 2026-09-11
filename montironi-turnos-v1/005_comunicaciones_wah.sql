@@ -1,139 +1,175 @@
 -- =============================================================================
--- 005_comunicaciones_wah.sql
--- Fuente de verdad Datos (Montironi) — alineado cima-ai WAH inbox
--- Tenancy: empresa_id uuid FK empresa RESTRICT (sin tenant_id cima)
--- Cadena CASCADE: whatsapp_accounts → wah_conversations → wah_messages → wah_media
+-- 005_comunicaciones_wah.sql — Montironi Turnos / Cima AI  ★ FUENTE OFICIAL
+-- Clone literal WAH (cima-ai drizzle 0004–0006 + wah.ts).
+-- Este archivo SUPERSEDE cualquier 005 reescrito en repo por el cloud agent.
+--
+-- Shape cima (obligatorio):
+--   • whatsapp_accounts.user_id + UNIQUE parcial (NO en wah_conversations)
+--   • wah_media.message_id NOT NULL → wah_messages ON DELETE CASCADE
+--   • wah_messages SIN media_id
+-- Adaptación Montironi únicamente:
+--   • tenant_id → empresa_id uuid FK empresa RESTRICT
+--   • user_id/sender_user_id → uuid FK usuario SET NULL
+--   • wah_conversations.cliente_id opcional (CRM)
 -- =============================================================================
 
--- ─── whatsapp_accounts ───────────────────────────────────────────────────────
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- whatsapp_accounts
+-- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS whatsapp_accounts (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    empresa_id           UUID NOT NULL,
-    user_id              UUID,
-    phone_number_id      TEXT NOT NULL,
-    display_phone_number TEXT,
-    waba_id              TEXT,
-    label                TEXT,
-    active               BOOLEAN NOT NULL DEFAULT true,
-    created_at           TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT whatsapp_accounts_empresa_id_fkey
-        FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT whatsapp_accounts_user_id_fkey
-        FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT whatsapp_accounts_empresa_phone_key UNIQUE (empresa_id, phone_number_id)
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id       uuid NOT NULL REFERENCES empresa (id) ON DELETE RESTRICT,
+  user_id          uuid REFERENCES usuario (id) ON DELETE SET NULL,
+  phone_number_id  text NOT NULL,
+  display_number   text,
+  label            text,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS ix_whatsapp_accounts_empresa_active
-    ON whatsapp_accounts (empresa_id, active);
+COMMENT ON TABLE whatsapp_accounts IS
+  'Línea WhatsApp Cloud API por tenant. phone_number_id = Meta Phone Number ID.';
+COMMENT ON COLUMN whatsapp_accounts.user_id IS
+  'Titular / filtro de acceso (member). NULL = línea compartida del tenant.';
 
+CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_accounts_phone_number_id_uidx
+  ON whatsapp_accounts (phone_number_id);
+
+-- Una línea asignada por usuario (múltiples NULL permitidos)
 CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_accounts_user_id_uidx
-    ON whatsapp_accounts (user_id) WHERE user_id IS NOT NULL;
+  ON whatsapp_accounts (user_id)
+  WHERE user_id IS NOT NULL;
 
--- ─── wah_conversations ───────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS whatsapp_accounts_empresa_idx
+  ON whatsapp_accounts (empresa_id);
+
+-- ---------------------------------------------------------------------------
+-- wah_conversations
+-- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS wah_conversations (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    empresa_id           UUID NOT NULL,
-    account_id           UUID NOT NULL,
-    cliente_id           UUID,
-    wa_contact_id        TEXT NOT NULL,
-    contact_name         TEXT,
-    contact_phone        TEXT NOT NULL,
-    last_message_at      TIMESTAMPTZ(6),
-    last_message_preview TEXT,
-    unread_count         INTEGER NOT NULL DEFAULT 0,
-    bot_paused           BOOLEAN NOT NULL DEFAULT false,
-    pending_human        BOOLEAN NOT NULL DEFAULT false,
-    created_at           TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT wah_conversations_empresa_id_fkey
-        FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT wah_conversations_account_id_fkey
-        FOREIGN KEY (account_id) REFERENCES whatsapp_accounts(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT wah_conversations_cliente_id_fkey
-        FOREIGN KEY (cliente_id) REFERENCES cliente(id) ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT wah_conversations_account_contact_key UNIQUE (account_id, wa_contact_id)
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id             uuid NOT NULL REFERENCES empresa (id) ON DELETE RESTRICT,
+  account_id             uuid NOT NULL REFERENCES whatsapp_accounts (id) ON DELETE CASCADE,
+  cliente_id             uuid REFERENCES cliente (id) ON DELETE SET NULL,
+  contact_number         text NOT NULL,
+  contact_name           text,
+  last_message_at        timestamptz,
+  last_message_preview   text,
+  unread_count           integer NOT NULL DEFAULT 0 CHECK (unread_count >= 0),
+  pending_reply          boolean NOT NULL DEFAULT false,
+  bot_paused             boolean NOT NULL DEFAULT false,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS ix_wah_conversations_empresa_last_message
-    ON wah_conversations (empresa_id, last_message_at DESC);
+COMMENT ON TABLE wah_conversations IS
+  'Conversación = cuenta WA + contact_number. Humano send → bot_paused=true; resume → false.';
+COMMENT ON COLUMN wah_conversations.cliente_id IS
+  'Opcional: vínculo al CRM Montironi cuando el teléfono matchea un cliente.';
+COMMENT ON COLUMN wah_conversations.contact_number IS
+  'Preferir E.164 (ej. +54911…). No enforced en V1 comunicaciones (WA source tampoco).';
 
-CREATE INDEX IF NOT EXISTS ix_wah_conversations_empresa_pending
-    ON wah_conversations (empresa_id, pending_human);
+CREATE UNIQUE INDEX IF NOT EXISTS wah_conversations_account_contact_uidx
+  ON wah_conversations (account_id, contact_number);
 
-CREATE INDEX IF NOT EXISTS ix_wah_conversations_empresa_unread
-    ON wah_conversations (empresa_id, unread_count);
+CREATE INDEX IF NOT EXISTS wah_conversations_empresa_last_message_idx
+  ON wah_conversations (empresa_id, last_message_at DESC NULLS LAST);
 
--- ─── wah_messages ────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS wah_conversations_cliente_idx
+  ON wah_conversations (cliente_id)
+  WHERE cliente_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS wah_conversations_pending_idx
+  ON wah_conversations (empresa_id, account_id)
+  WHERE pending_reply OR bot_paused OR unread_count > 0;
+
+-- ---------------------------------------------------------------------------
+-- wah_messages
+-- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS wah_messages (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    empresa_id      UUID NOT NULL,
-    conversation_id UUID NOT NULL,
-    direction       TEXT NOT NULL,
-    sender_type     TEXT NOT NULL,
-    message_type    TEXT NOT NULL DEFAULT 'text',
-    body            TEXT,
-    wamid           TEXT,
-    sender_user_id  UUID,
-    status          TEXT NOT NULL DEFAULT 'sent',
-    metadata        JSONB,
-    created_at      TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT wah_messages_direction_check
-        CHECK (direction IN ('inbound', 'outbound')),
-    CONSTRAINT wah_messages_empresa_id_fkey
-        FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT wah_messages_conversation_id_fkey
-        FOREIGN KEY (conversation_id) REFERENCES wah_conversations(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT wah_messages_sender_user_id_fkey
-        FOREIGN KEY (sender_user_id) REFERENCES usuario(id) ON DELETE SET NULL ON UPDATE CASCADE
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id        uuid NOT NULL REFERENCES empresa (id) ON DELETE RESTRICT,
+  conversation_id   uuid NOT NULL REFERENCES wah_conversations (id) ON DELETE CASCADE,
+  direction         text NOT NULL,
+  type              text NOT NULL DEFAULT 'text',
+  body              text,
+  wamid             text,
+  status            text NOT NULL DEFAULT 'received',
+  generated_by_ai   boolean NOT NULL DEFAULT false,
+  sender_user_id    uuid REFERENCES usuario (id) ON DELETE SET NULL,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_wah_messages_direction
+    CHECK (direction IN ('inbound', 'outbound')),
+  CONSTRAINT ck_wah_messages_type
+    CHECK (length(trim(type)) > 0),
+  CONSTRAINT ck_wah_messages_status
+    CHECK (length(trim(status)) > 0)
 );
 
-CREATE INDEX IF NOT EXISTS ix_wah_messages_conversation_created
-    ON wah_messages (conversation_id, created_at ASC);
+COMMENT ON TABLE wah_messages IS
+  'Mensajes WA. direction inbound|outbound. wamid único global (Meta). status: received|sent|delivered|read|failed|…';
+COMMENT ON COLUMN wah_messages.generated_by_ai IS
+  'true si el outbound lo generó el bot/agente.';
+COMMENT ON COLUMN wah_messages.sender_user_id IS
+  'Usuario humano que envió desde el panel (outbound).';
 
-CREATE INDEX IF NOT EXISTS ix_wah_messages_empresa_created
-    ON wah_messages (empresa_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS wah_messages_wamid_uidx
+  ON wah_messages (wamid)
+  WHERE wamid IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_wah_messages_wamid
-    ON wah_messages (wamid) WHERE wamid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wah_messages_conversation_created_idx
+  ON wah_messages (conversation_id, created_at);
 
--- ─── wah_media ───────────────────────────────────────────────────────────────
--- Media cuelga del mensaje (message_id NOT NULL). Meta Cloud API id en meta_media_id.
+CREATE INDEX IF NOT EXISTS wah_messages_empresa_idx
+  ON wah_messages (empresa_id);
+
+CREATE INDEX IF NOT EXISTS wah_messages_empresa_created_idx
+  ON wah_messages (empresa_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- wah_media
+-- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS wah_media (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    empresa_id     UUID NOT NULL,
-    message_id     UUID NOT NULL,
-    meta_media_id  TEXT,
-    mime_type      TEXT NOT NULL,
-    file_name      TEXT NOT NULL,
-    storage_path   TEXT NOT NULL,
-    file_size      INTEGER,
-    sha256         TEXT,
-    caption        TEXT,
-    width          INTEGER,
-    height         INTEGER,
-    duration_ms    INTEGER,
-    voice          BOOLEAN NOT NULL DEFAULT false,
-    created_at     TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT wah_media_empresa_id_fkey
-        FOREIGN KEY (empresa_id) REFERENCES empresa(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT wah_media_message_id_fkey
-        FOREIGN KEY (message_id) REFERENCES wah_messages(id) ON DELETE CASCADE ON UPDATE CASCADE
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id     uuid NOT NULL REFERENCES empresa (id) ON DELETE RESTRICT,
+  message_id     uuid NOT NULL REFERENCES wah_messages (id) ON DELETE CASCADE,
+  meta_media_id  text,
+  mime_type      text,
+  filename       text,
+  storage_path   text,
+  size_bytes     integer CHECK (size_bytes IS NULL OR size_bytes >= 0),
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS ix_wah_media_empresa_created
-    ON wah_media (empresa_id, created_at DESC);
+COMMENT ON TABLE wah_media IS
+  'Adjuntos. storage_path relativo a WAH_MEDIA_DIR. meta_media_id = id Meta cuando aplica.';
 
 CREATE INDEX IF NOT EXISTS wah_media_message_idx
-    ON wah_media (message_id);
+  ON wah_media (message_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_wah_media_meta_media_id
-    ON wah_media (meta_media_id) WHERE meta_media_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wah_media_empresa_idx
+  ON wah_media (empresa_id);
 
--- ─── Notas de adaptación Montironi vs cima-ai ────────────────────────────────
--- tenant_id          → empresa_id (RESTRICT en las 4 tablas WAH)
--- wa_message_id      → wamid (+ UNIQUE parcial)
--- user_id            → whatsapp_accounts (no wah_conversations)
--- media_id en msg    → wah_media.message_id (CASCADE al borrar mensaje)
--- enums direction    → TEXT + CHECK inbound|outbound
--- sender_user_id     → wah_messages FK usuario SET NULL
+COMMIT;
+
+-- =============================================================================
+-- Prisma mapping (cloud agent) — sugerido
+-- =============================================================================
+-- model WhatsappAccount  @@map("whatsapp_accounts")
+-- model WahConversation  @@map("wah_conversations")
+-- model WahMessage       @@map("wah_messages")
+-- model WahMedia         @@map("wah_media")
+-- empresaId / userId / senderUserId / clienteId / phoneNumberId / …
+--
+-- ROLLBACK MANUAL
+-- =============================================================================
+/*
+BEGIN;
+DROP TABLE IF EXISTS wah_media CASCADE;
+DROP TABLE IF EXISTS wah_messages CASCADE;
+DROP TABLE IF EXISTS wah_conversations CASCADE;
+DROP TABLE IF EXISTS whatsapp_accounts CASCADE;
+COMMIT;
+*/
