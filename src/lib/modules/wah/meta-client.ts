@@ -92,3 +92,42 @@ export async function sendWhatsAppMedia(params: SendMediaParams): Promise<{ wami
   const json = (await res.json()) as { messages?: { id: string }[] };
   return { wamid: json.messages?.[0]?.id ?? `local_${randomUUID()}` };
 }
+
+export async function downloadWhatsAppMedia(
+  mediaId: string
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const { metaAccessToken } = getWahConfig();
+
+  if (!metaAccessToken) {
+    return {
+      buffer: Buffer.from(`mock-media:${mediaId}`),
+      mimeType: "application/octet-stream",
+    };
+  }
+
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${metaAccessToken}` },
+  });
+
+  if (!metaRes.ok) {
+    const detail = await metaRes.text();
+    throw new Error(`Meta media metadata error: ${metaRes.status} ${detail}`);
+  }
+
+  const metaJson = (await metaRes.json()) as { url?: string; mime_type?: string };
+  if (!metaJson.url) {
+    throw new Error("Meta media response missing url");
+  }
+
+  const fileRes = await fetch(metaJson.url, {
+    headers: { Authorization: `Bearer ${metaAccessToken}` },
+  });
+
+  if (!fileRes.ok) {
+    const detail = await fileRes.text();
+    throw new Error(`Meta media download error: ${fileRes.status} ${detail}`);
+  }
+
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  return { buffer, mimeType: metaJson.mime_type ?? "application/octet-stream" };
+}

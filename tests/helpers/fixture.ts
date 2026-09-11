@@ -17,11 +17,15 @@ export interface TestFixture {
   userId?: string;
 }
 
-export async function createWahAccount(empresaId: string, suffix = "test") {
+export async function createWahAccount(
+  empresaId: string,
+  suffix = "test",
+  phoneNumberId?: string
+) {
   return prisma.whatsappAccount.create({
     data: {
       empresaId,
-      phoneNumberId: `phone_${suffix}`,
+      phoneNumberId: phoneNumberId ?? `phone_${suffix}`,
       displayPhoneNumber: "+5491112345678",
       label: `WA ${suffix}`,
     },

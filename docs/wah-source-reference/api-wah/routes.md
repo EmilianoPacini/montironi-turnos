@@ -20,3 +20,9 @@
 | POST | `/api/wah/integration/send-audio` |
 | POST | `/api/wah/integration/send-file` |
 | GET | `/api/wah/integration/media/:mediaId?empresa_id=` |
+
+## Webhook inbound (`X-Cima-Forward-Secret` = `CIMA_FORWARD_SECRET`)
+
+| Method | Path |
+|--------|------|
+| POST | `/api/webhooks/whatsapp/received-data` |
