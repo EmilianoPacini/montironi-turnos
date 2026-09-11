@@ -33,7 +33,7 @@ export const VALID_TRANSITIONS: Record<EstadoTurno, EstadoTurno[]> = {
   pendiente: [EstadoTurno.confirmado, EstadoTurno.cancelado],
   confirmado: [EstadoTurno.recibido, EstadoTurno.cancelado, EstadoTurno.ausente],
   recibido: [EstadoTurno.en_servicio, EstadoTurno.cancelado, EstadoTurno.ausente],
-  en_servicio: [EstadoTurno.finalizado],
+  en_servicio: [EstadoTurno.finalizado, EstadoTurno.cancelado],
   finalizado: [],
   cancelado: [],
   ausente: [],

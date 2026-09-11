@@ -54,9 +54,10 @@ Tx: validar → calcular `finaliza_en` → resolver bahía → insert turno pend
 
 ### ConfirmarTurno
 Mantiene ocupación si bahía/periodo iguales; swap atómico si cambian. Congela snapshots. `version++`. **No libera** al confirmar.
+Rechaza pendientes con `inicio` en el pasado (misma regla que VencerPendientes): aplica `vencido`, libera hold, `TransicionInvalida`.
 
 ### TransicionarEstadoTurno
-Cancelar/ausente/vencido: `ocupacion.activo=false`.
+Cancelar/ausente/vencido/finalizado: `ocupacion.activo=false`. `en_servicio → cancelado` permitido (cancelación excepcional).
 
 ### ReprogramarTurno
 Swap atómico; conflicto deja original intacto.
@@ -80,6 +81,7 @@ Job: `pendiente→vencido` + liberar hold.
 | POST | `/api/v1/turnos/{id}/cancelar` |
 | POST | `/api/v1/bahias/{bahiaId}/bloqueos` |
 | DELETE | `/api/v1/bloqueos/{ocupacionId}` |
+| POST | `/api/v1/jobs/vencer-pendientes` (cron: `x-api-key` o sesión admin) |
 
 Headers mutadores: cookie de sesión (panel), `Idempotency-Key`, body/header `version` en mutaciones de turno.
 

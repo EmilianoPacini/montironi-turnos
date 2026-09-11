@@ -284,7 +284,12 @@ async function main() {
         tipo: "turno",
         inicio,
         fin: finalizaEn,
-        activo: true,
+        activo: ![
+          EstadoTurno.finalizado,
+          EstadoTurno.cancelado,
+          EstadoTurno.ausente,
+          EstadoTurno.vencido,
+        ].includes(spec.estado),
       },
     });
   }
