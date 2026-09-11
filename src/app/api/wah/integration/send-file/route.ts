@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return jsonOk({
       conversation_id: conversationId,
       message_id: message.id,
-      wa_message_id: message.waMessageId,
+      wa_message_id: message.wamid,
       message: serializeMessage(message),
     });
   } catch (e) {

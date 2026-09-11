@@ -24,6 +24,7 @@ ALTER TABLE "turno" ADD COLUMN "kilometraje" INTEGER;
 CREATE TABLE "servicio_intervalo_km" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "servicio_id" UUID NOT NULL,
+    "empresa_id" UUID NOT NULL,
     "tipo_vehiculo" "tipo_vehiculo" NOT NULL,
     "condicion" "condicion_vehiculo" NOT NULL,
     "intervalo_km" INTEGER NOT NULL,
@@ -33,9 +34,13 @@ CREATE TABLE "servicio_intervalo_km" (
 
 CREATE UNIQUE INDEX "servicio_intervalo_km_servicio_id_tipo_vehiculo_condicion_key"
   ON "servicio_intervalo_km"("servicio_id", "tipo_vehiculo", "condicion");
+CREATE INDEX "ix_servicio_intervalo_km_empresa"
+  ON "servicio_intervalo_km"("empresa_id");
 
 ALTER TABLE "servicio_intervalo_km" ADD CONSTRAINT "servicio_intervalo_km_servicio_id_fkey"
   FOREIGN KEY ("servicio_id") REFERENCES "servicio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "servicio_intervalo_km" ADD CONSTRAINT "servicio_intervalo_km_empresa_id_fkey"
+  FOREIGN KEY ("empresa_id") REFERENCES "empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Audit movimientos
 CREATE TABLE "movimiento" (

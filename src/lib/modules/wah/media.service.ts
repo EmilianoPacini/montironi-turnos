@@ -10,9 +10,16 @@ async function ensureDir(dir: string) {
 
 export async function storeWahMedia(params: {
   empresaId: string;
+  messageId: string;
   buffer: Buffer;
   mimeType: string;
   fileName: string;
+  metaMediaId?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  voice?: boolean;
   subdir?: "media" | "send";
 }) {
   const { mediaDir, sendFilesDir } = getWahConfig();
@@ -28,11 +35,18 @@ export async function storeWahMedia(params: {
   return prisma.wahMedia.create({
     data: {
       empresaId: params.empresaId,
+      messageId: params.messageId,
+      metaMediaId: params.metaMediaId,
       mimeType: params.mimeType,
       fileName: params.fileName,
       storagePath,
       fileSize: params.buffer.length,
       sha256,
+      caption: params.caption,
+      width: params.width,
+      height: params.height,
+      durationMs: params.durationMs,
+      voice: params.voice ?? false,
     },
   });
 }

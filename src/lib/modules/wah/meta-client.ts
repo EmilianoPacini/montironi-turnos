@@ -15,12 +15,12 @@ type SendMediaParams = SendTextParams & {
   caption?: string;
 };
 
-export async function sendWhatsAppText(params: SendTextParams): Promise<{ waMessageId: string }> {
+export async function sendWhatsAppText(params: SendTextParams): Promise<{ wamid: string }> {
   const { metaAccessToken } = getWahConfig();
   const to = params.to.replace(/\D/g, "");
 
   if (!metaAccessToken) {
-    return { waMessageId: `local_${randomUUID()}` };
+    return { wamid: `local_${randomUUID()}` };
   }
 
   const res = await fetch(
@@ -46,16 +46,15 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<{ waMess
   }
 
   const json = (await res.json()) as { messages?: { id: string }[] };
-  const waMessageId = json.messages?.[0]?.id ?? `local_${randomUUID()}`;
-  return { waMessageId };
+  return { wamid: json.messages?.[0]?.id ?? `local_${randomUUID()}` };
 }
 
-export async function sendWhatsAppMedia(params: SendMediaParams): Promise<{ waMessageId: string }> {
+export async function sendWhatsAppMedia(params: SendMediaParams): Promise<{ wamid: string }> {
   const { metaAccessToken } = getWahConfig();
   const to = params.to.replace(/\D/g, "");
 
   if (!metaAccessToken) {
-    return { waMessageId: `local_${randomUUID()}` };
+    return { wamid: `local_${randomUUID()}` };
   }
 
   const mediaPayload: Record<string, unknown> = params.mediaId
@@ -91,5 +90,5 @@ export async function sendWhatsAppMedia(params: SendMediaParams): Promise<{ waMe
   }
 
   const json = (await res.json()) as { messages?: { id: string }[] };
-  return { waMessageId: json.messages?.[0]?.id ?? `local_${randomUUID()}` };
+  return { wamid: json.messages?.[0]?.id ?? `local_${randomUUID()}` };
 }
