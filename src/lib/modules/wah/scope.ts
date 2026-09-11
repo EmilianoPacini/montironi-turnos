@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { RolUsuario } from "@prisma/client";
+import { assertPanelAccess } from "@/lib/auth/access";
 import { requireSession } from "@/lib/auth/session";
 import {
   getCimaForwardSecretHeader,
   verifyCimaForwardSecret,
 } from "@/lib/modules/wah/integration-auth";
 
-const INBOX_ROLES: RolUsuario[] = [RolUsuario.admin, RolUsuario.empleado];
-
 export async function requireWahSession() {
   const session = await requireSession();
-  if (!INBOX_ROLES.includes(session.rol)) {
+  try {
+    assertPanelAccess({ rol: session.rol });
+  } catch {
     throw new WahAuthError("FORBIDDEN", 403);
   }
   return session;

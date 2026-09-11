@@ -1,14 +1,10 @@
-import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { saveConfigAction } from "@/lib/modules/appointments/actions";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 
 export default async function ConfigPage() {
   const session = await getAuthSession();
-
-  if (!canAccessPanelRoute(session.rol, "/configuracion")) redirect("/agenda");
 
   const talleres = await listTalleres(session.empresaId);
 
