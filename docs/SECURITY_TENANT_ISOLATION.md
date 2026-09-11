@@ -22,3 +22,7 @@ Toda mutación `find`/`update`/`upsert` usa scope `{ id, empresaId }` (o equival
 ## Fuera de alcance
 
 RLS a nivel PostgreSQL, historias B4–B8.
+
+## Follow-up (post B3 AppSec note)
+
+`getConfiguracionTaller(tallerId, empresaId)` verifies taller ownership before read (closes minor read IDOR).

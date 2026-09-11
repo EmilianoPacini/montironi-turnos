@@ -46,7 +46,14 @@ export async function getTaller(id: string, empresaId: string) {
   });
 }
 
-export async function getConfiguracionTaller(tallerId: string) {
+export async function getConfiguracionTaller(tallerId: string, empresaId: string) {
+  const taller = await prisma.taller.findFirst({
+    where: { id: tallerId, empresaId },
+    select: { id: true },
+  });
+  if (!taller) {
+    throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
+  }
   return prisma.configuracionTurnos.findUnique({ where: { tallerId } });
 }
 

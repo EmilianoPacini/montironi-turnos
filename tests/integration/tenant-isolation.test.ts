@@ -150,4 +150,14 @@ describe("B3 · Aislamiento multi-tenant (IDOR)", () => {
     });
     expect(crossRef).toBeNull();
   });
+
+  it("getConfiguracionTaller — empresa B no puede leer config de taller de A", async () => {
+    const { getConfiguracionTaller } = await import("@/lib/modules/catalog/service");
+    await expect(
+      getConfiguracionTaller(empresaA.tallerId, empresaB.empresaId)
+    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
+
+    const own = await getConfiguracionTaller(empresaA.tallerId, empresaA.empresaId);
+    expect(own === null || own.tallerId === empresaA.tallerId).toBe(true);
+  });
 });
