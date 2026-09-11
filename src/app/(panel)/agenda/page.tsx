@@ -12,6 +12,7 @@ import { CalendarLegend } from "@/components/agenda/CalendarLegend";
 import { TurnoCard } from "@/components/turnos/TurnoCard";
 import { CANAL_LABELS } from "@/lib/modules/appointments/constants";
 import { buildAgendaQuery } from "@/lib/agenda-query";
+import { mapTurnoForAgendaClient } from "@/lib/serialize-for-client";
 import { CanalTurno, EstadoTurno } from "@prisma/client";
 
 export default async function AgendaPage({
@@ -144,7 +145,7 @@ export default async function AgendaPage({
           date={date}
           tallerId={tallerId}
           bahias={agenda.bahias}
-          turnos={turnos}
+          turnos={turnos.map(mapTurnoForAgendaClient)}
           bloqueos={agenda.bloqueos}
           isClosed={agenda.isClosed}
           schedule={agenda.schedule}

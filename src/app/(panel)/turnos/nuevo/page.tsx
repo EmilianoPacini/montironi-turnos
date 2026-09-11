@@ -4,6 +4,7 @@ import { listTalleres, serviciosForTaller } from "@/lib/modules/catalog/service"
 import { listClientes } from "@/lib/modules/customers/service";
 import { getAvailabilityForDate, getCompatibleBahias } from "@/lib/modules/availability/service";
 import { NuevoTurnoForm } from "@/components/turnos/NuevoTurnoForm";
+import { mapServicioForClient } from "@/lib/serialize-for-client";
 import { format, parseISO, startOfDay } from "date-fns";
 
 export default async function NuevoTurnoPage({
@@ -45,7 +46,7 @@ export default async function NuevoTurnoPage({
       <NuevoTurnoForm
         tallerId={tallerId}
         clientes={clientes}
-        servicios={servicios}
+        servicios={servicios.map(mapServicioForClient)}
         compatibleBahias={compatibleBahias}
         defaultBahiaId={bahiaId}
         defaultInicio={inicioParam}
