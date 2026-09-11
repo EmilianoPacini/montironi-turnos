@@ -65,8 +65,8 @@ Swap atómico; conflicto deja original intacto.
 ### CrearBloqueoBahia / LiberarBloqueoBahia
 `tipo=bloqueo`, `turno_id` NULL, `motivo` obligatorio.
 
-### VencerPendientes
-Job: `pendiente→vencido` + liberar hold.
+### VencerPendientes (job obligatorio)
+`POST /api/v1/jobs/vencer-pendientes` — ejecuta `expirePendingTurnos` sin depender de GET `/agenda` ni render del panel. Auth: `x-api-key` (= `AGENT_API_KEY`) + opcional `x-empresa`, o sesión admin.
 
 ## API v1
 

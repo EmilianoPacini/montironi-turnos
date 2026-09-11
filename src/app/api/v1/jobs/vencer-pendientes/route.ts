@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { RolUsuario } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import { assertAdminRole } from "@/lib/auth/guards";
 import { expirePendingTurnos } from "@/lib/modules/agenda/application";

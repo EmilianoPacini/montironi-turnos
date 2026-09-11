@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { EstadoTurno, TipoOcupacion } from "@prisma/client";
 import { addMinutes } from "date-fns";
@@ -7,6 +8,7 @@ import {
   cancelTurno,
   transitionTurnoState,
 } from "@/lib/modules/appointments/service";
+import { POST as vencerPendientesJob } from "@/app/api/v1/jobs/vencer-pendientes/route";
 import {
   createTestFixture,
   destroyTestFixture,
@@ -151,6 +153,42 @@ describe("QA P0 · Bugs dominio ALTA", () => {
 
     const updated = await prisma.turno.findUnique({ where: { id: turno.id } });
     expect(updated?.estado).toBe(EstadoTurno.finalizado);
+
+    const active = await prisma.ocupacionBahia.findFirst({
+      where: { turnoId: turno.id, activo: true },
+    });
+    expect(active).toBeNull();
+  });
+
+  it("Bug 4 — POST /api/v1/jobs/vencer-pendientes vence sin GET /agenda", async () => {
+    const past = addMinutes(new Date(), -120);
+    const turno = await crearTurnoPendiente({
+      empresaId: fx.empresaId,
+      tallerId: fx.tallerId,
+      bahiaId: fx.bahiaId,
+      clienteId: fx.clienteId,
+      vehiculoId: fx.vehiculoId,
+      servicioIds: [fx.servicioId],
+      inicio: past,
+    });
+
+    const apiKey = process.env.AGENT_API_KEY ?? "montironi-agent-api-key-dev";
+    const request = new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "x-empresa": fx.empresaSlug,
+      },
+    });
+
+    const response = await vencerPendientesJob(request);
+    const body = (await response.json()) as { vencidos: number };
+
+    expect(response.status).toBe(200);
+    expect(body.vencidos).toBeGreaterThanOrEqual(1);
+
+    const updated = await prisma.turno.findUnique({ where: { id: turno.id } });
+    expect(updated?.estado).toBe(EstadoTurno.vencido);
 
     const active = await prisma.ocupacionBahia.findFirst({
       where: { turnoId: turno.id, activo: true },
