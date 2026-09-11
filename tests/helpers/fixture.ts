@@ -5,6 +5,7 @@ export const prisma = new PrismaClient();
 
 export interface TestFixture {
   empresaId: string;
+  empresaSlug: string;
   tallerId: string;
   bahiaId: string;
   bahia2Id: string;
@@ -81,6 +82,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
 
   return {
     empresaId: empresa.id,
+    empresaSlug: empresa.slug,
     tallerId: taller.id,
     bahiaId: bahias[0].id,
     bahia2Id: bahias[1].id,

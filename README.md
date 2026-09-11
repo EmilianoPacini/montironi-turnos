@@ -67,6 +67,8 @@ V1 del panel usa solo roles `admin` y `empleado` (el enum incluye también `oper
 | `npm run dev` | Next.js en [http://localhost:43123](http://localhost:43123) |
 | `npm run build` | Build de producción |
 
+**Cron VencerPendientes:** `POST /api/v1/jobs/vencer-pendientes` con header `x-api-key: $AGENT_API_KEY` (opcional `x-empresa: montironi`).
+
 ## Arquitectura
 
 Monolito modular en Next.js App Router:
@@ -146,6 +148,8 @@ Sesión de panel (cookie). Mutaciones aceptan `Idempotency-Key` y `x-turno-versi
 | DELETE | `/api/v1/bloqueos/{ocupacionId}` |
 
 Capas: `src/lib/modules/agenda/{domain,application,infrastructure}` — ver `docs/DOMAIN_SERVICES.md`.
+
+**Transiciones:** body `{ "estado": "recibido", "version": N }` — alias legacy `nuevoEstado` aceptado si falta `estado`.
 
 ## Tests
 

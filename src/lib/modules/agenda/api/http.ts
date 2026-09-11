@@ -38,3 +38,11 @@ export function idempotencyKey(request: Request): string | undefined {
 export async function parseJsonBody<T>(request: Request): Promise<T> {
   return request.json() as Promise<T>;
 }
+
+/** POST /turnos/{id}/transiciones — `estado` canónico; `nuevoEstado` alias legacy. */
+export function parseTransicionEstado(body: {
+  estado?: string;
+  nuevoEstado?: string;
+}): string | undefined {
+  return body.estado ?? body.nuevoEstado;
+}

@@ -7,9 +7,11 @@ import {
   domainErrorResponse,
   idempotencyKey,
   parseJsonBody,
+  parseTransicionEstado,
   parseVersion,
 } from "@/lib/modules/agenda/api/http";
 
+/** Body: `{ estado, version, detalle? }` — alias legacy `nuevoEstado` si falta `estado`. */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,9 +19,19 @@ export async function POST(
   try {
     const session = await requireSession();
     const { id } = await params;
-    const body = await parseJsonBody<{ estado: EstadoTurno; version?: number; detalle?: string }>(
-      request
-    );
+    const body = await parseJsonBody<{
+      estado?: EstadoTurno;
+      nuevoEstado?: EstadoTurno;
+      version?: number;
+      detalle?: string;
+    }>(request);
+    const estado = parseTransicionEstado(body);
+    if (!estado) {
+      return Response.json(
+        { error: "estado requerido (alias: nuevoEstado)", code: "VALIDATION" },
+        { status: 400 }
+      );
+    }
     const version = parseVersion(request, body);
     if (version === undefined) {
       return Response.json({ error: "version requerida", code: "VALIDATION" }, { status: 400 });
@@ -30,7 +42,7 @@ export async function POST(
       const turno = await transitionTurnoState({
         turnoId: id,
         empresaId: session.empresaId,
-        nuevoEstado: body.estado,
+        nuevoEstado: estado as EstadoTurno,
         version,
         usuarioId: session.userId,
         detalle: body.detalle,

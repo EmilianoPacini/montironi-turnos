@@ -12,8 +12,8 @@ export const READ_ONLY_AVAILABILITY = true as const;
 /** ConfirmarTurno mantiene el hold; solo swap si cambia bahía o periodo. No libera. */
 export const CONFIRM_KEEPS_HOLD = true as const;
 
-/** Cancelar, ausente y vencido liberan capacidad (activo=false). */
-export const LIBERATE_ON_TERMINAL = ["cancelado", "ausente", "vencido"] as const;
+/** Cancelar, ausente, vencido y finalizado liberan capacidad (activo=false). */
+export const LIBERATE_ON_TERMINAL = ["cancelado", "ausente", "vencido", "finalizado"] as const;
 
 /** Única transición automática de estado. */
 export const AUTO_TRANSITION = "pendiente→vencido" as const;
