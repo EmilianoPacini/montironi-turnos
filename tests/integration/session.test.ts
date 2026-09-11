@@ -132,6 +132,59 @@ describe("Server-side sessions (B1+B2)", () => {
     expect(response.status).toBe(401);
   });
 
+  it("login anti-fixation: always new sessionId, prior session revoked", async () => {
+    const usuario = await createTestUsuario(fx.empresaId, `fixation-${Date.now()}`);
+
+    const first = await createTestServerSession(usuario.id, fx.empresaId);
+    await bindSessionCookie(first.sessionId);
+
+    const priorSessionId = first.sessionId;
+    await revokeServerSession(priorSessionId);
+    clearSessionCookie();
+
+    const second = await createTestServerSession(usuario.id, fx.empresaId);
+    await bindSessionCookie(second.sessionId);
+
+    expect(second.sessionId).not.toBe(priorSessionId);
+
+    const priorRow = await prisma.sesion.findUnique({ where: { id: priorSessionId } });
+    expect(priorRow?.revokedAt).not.toBeNull();
+
+    const session = await validateServerSession(second.sessionId);
+    expect(session.userId).toBe(usuario.id);
+  });
+
+  it("tenancy mismatch (stale sesion.empresaId) → 401 and revoke", async () => {
+    const usuario = await createTestUsuario(fx.empresaId, `tenancy-${Date.now()}`);
+    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
+
+    const otherEmpresa = await prisma.empresa.create({
+      data: { nombre: "Other Co", slug: `other-${Date.now()}` },
+    });
+
+    await prisma.sesion.update({
+      where: { id: sessionId },
+      data: { empresaId: otherEmpresa.id },
+    });
+
+    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
+
+    const row = await prisma.sesion.findUnique({ where: { id: sessionId } });
+    expect(row?.revokedAt).not.toBeNull();
+
+    await prisma.sesion.deleteMany({ where: { empresaId: otherEmpresa.id } });
+    await prisma.empresa.delete({ where: { id: otherEmpresa.id } });
+  });
+
+  it("resolved empresaId comes from usuario, not stale sesion row", async () => {
+    const usuario = await createTestUsuario(fx.empresaId, `empresa-src-${Date.now()}`);
+    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
+
+    const session = await validateServerSession(sessionId);
+    expect(session.empresaId).toBe(usuario.empresaId);
+    expect(session.empresaId).toBe(fx.empresaId);
+  });
+
   it("AGENT_API_KEY flow remains independent of cookie session", async () => {
     const apiKey = process.env.AGENT_API_KEY ?? "montironi-agent-api-key-dev";
     process.env.AGENT_API_KEY = apiKey;

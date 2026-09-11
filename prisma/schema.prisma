@@ -164,6 +164,7 @@ model Sesion {
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
+  @@index([expiresAt])
   @@map("sesion")
 }
 

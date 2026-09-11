@@ -39,6 +39,13 @@ export async function loginAction(formData: FormData) {
   const headerStore = await headers();
   const { userAgent, ip } = extractClientMetadata(headerStore);
 
+  // Anti-fixation: always issue a fresh sessionId; never reuse an existing row/cookie.
+  const priorSessionId = await readCookieSessionId();
+  if (priorSessionId) {
+    await revokeServerSession(priorSessionId);
+  }
+  await destroyClientSession();
+
   const { sessionId } = await createServerSession({
     usuarioId: usuario.id,
     empresaId: usuario.empresaId,

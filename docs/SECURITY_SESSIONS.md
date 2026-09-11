@@ -57,6 +57,16 @@ npx tsx scripts/cleanup-expired-sessions.ts
 
 Deletes session rows expired or revoked more than 12h ago.
 
+## NFR (AppSec)
+
+| Requirement | Implementation |
+|-------------|----------------|
+| Indexes | `usuario_id` (mass revoke), `expires_at` (cleanup cron) |
+| Cookie flags | `httpOnly`, `secure` in production, `sameSite: lax` |
+| Anti-fixation | Login revokes prior cookie session, clears cookie, **always** inserts new `sesion` row |
+| Tenancy | `sesion.empresaId` must match `usuario.empresaId`; resolved `empresaId` returned from `usuario` |
+| Logging | Never log `sessionId` in plaintext (counts/metadata only) |
+
 ## Key modules
 
 ```

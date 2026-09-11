@@ -16,6 +16,9 @@ CREATE TABLE "sesion" (
 -- CreateIndex
 CREATE INDEX "sesion_usuario_id_idx" ON "sesion"("usuario_id");
 
+-- CreateIndex
+CREATE INDEX "sesion_expires_at_idx" ON "sesion"("expires_at");
+
 -- AddForeignKey
 ALTER TABLE "sesion" ADD CONSTRAINT "sesion_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "usuario"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

@@ -58,7 +58,7 @@ export async function validateServerSession(
   return {
     sessionId: sesion.id,
     userId: usuario.id,
-    empresaId: sesion.empresaId,
+    empresaId: usuario.empresaId,
     email: usuario.email,
     nombre: usuario.nombre,
     rol: usuario.rol,
