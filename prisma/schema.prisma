@@ -98,6 +98,13 @@ enum CondicionVehiculo {
   @@map("condicion_vehiculo")
 }
 
+enum DireccionMensajeWah {
+  entrante
+  saliente
+
+  @@map("direccion_mensaje_wah")
+}
+
 model Empresa {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre    String
@@ -113,8 +120,9 @@ model Empresa {
   clientes       Cliente[]
   vehiculos      Vehiculo[]
   turnos         Turno[]
-  operacionesApi OperacionApi[]
-  movimientos    Movimiento[]
+  operacionesApi    OperacionApi[]
+  movimientos       Movimiento[]
+  conversacionesWah ConversacionWah[]
 
   @@map("empresa")
 }
@@ -304,8 +312,9 @@ model Cliente {
 
   empresa    Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   vehiculos  ClienteVehiculo[]
-  documentos DocumentoCliente[]
-  turnos     Turno[]
+  documentos        DocumentoCliente[]
+  turnos            Turno[]
+  conversacionesWah ConversacionWah[]
 
   @@index([empresaId, telefono])
   @@map("cliente")
@@ -487,4 +496,40 @@ model Movimiento {
   @@index([empresaId, createdAt(sort: Desc)])
   @@index([entidad, entidadId])
   @@map("movimiento")
+}
+
+model ConversacionWah {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  clienteId       String?   @map("cliente_id") @db.Uuid
+  telefono        String
+  nombreContacto  String?   @map("nombre_contacto")
+  ultimoMensaje   String?   @map("ultimo_mensaje")
+  ultimoMensajeAt DateTime? @map("ultimo_mensaje_at") @db.Timestamptz(6)
+  noLeidos        Int       @default(0) @map("no_leidos")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa  Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente  Cliente?     @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  mensajes MensajeWah[]
+
+  @@unique([empresaId, telefono])
+  @@index([empresaId, ultimoMensajeAt(sort: Desc)])
+  @@map("conversacion_wah")
+}
+
+model MensajeWah {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversacionId String              @map("conversacion_id") @db.Uuid
+  direccion      DireccionMensajeWah
+  cuerpo         String
+  leido          Boolean             @default(false)
+  enviadoAt      DateTime            @map("enviado_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversacion ConversacionWah @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, enviadoAt])
+  @@map("mensaje_wah")
 }
