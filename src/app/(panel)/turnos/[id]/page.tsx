@@ -6,7 +6,6 @@ import { getAuthSession } from "@/lib/auth/session";
 import { getTurnoById, expirePendingTurnos } from "@/lib/modules/appointments/service";
 import { EstadoChip } from "@/components/turnos/EstadoChip";
 import {
-  VALID_TRANSITIONS,
   CANAL_LABELS,
   canTransition,
   formatPrecioSnapshot,
@@ -26,10 +25,6 @@ export default async function TurnoDetailPage({
   await expirePendingTurnos(session.empresaId);
   const turno = await getTurnoById(id, session.empresaId);
   if (!turno) notFound();
-
-  const transiciones = VALID_TRANSITIONS[turno.estado].filter(
-    (t) => t !== EstadoTurno.cancelado
-  );
 
   const proximosKm = await Promise.all(
     turno.detalles.map(async (d) => {
