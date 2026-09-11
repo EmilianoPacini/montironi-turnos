@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAgentApiKey, withIdempotency, getEmpresaBySlug } from "@/lib/modules/agents-api/idempotency";
+import { dispatchAgentAction } from "@/lib/modules/agents-api/dispatch";
 import { listServicios } from "@/lib/modules/catalog/service";
 import { getAvailabilityForDate } from "@/lib/modules/availability/service";
-import {
-  createTurno,
-  getTurnoById,
-  cancelTurno,
-  rescheduleTurno,
-  assertNotPastInicio,
-  isDomainError,
-  httpStatusForDomainError,
-} from "@/lib/modules/appointments/service";
-import { upsertCliente, upsertVehiculo, getClienteContext } from "@/lib/modules/customers/service";
-import { clasificarCliente, serializePerfilBuyer } from "@/lib/modules/buyer/service";
+import { getTurnoById, isDomainError, httpStatusForDomainError } from "@/lib/modules/appointments/service";
+import { getClienteContext } from "@/lib/modules/customers/service";
 import { ClienteValidationError } from "@/lib/modules/customers/validation";
-import { CanalTurno } from "@prisma/client";
 
 function unauthorized() {
   return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -35,22 +26,6 @@ function errorResponse(e: unknown) {
   }
   console.error(e);
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
-}
-
-function resolveCanal(body: { canal?: string; origen?: string }): CanalTurno {
-  const raw = body.canal ?? body.origen;
-  if (raw && Object.values(CanalTurno).includes(raw as CanalTurno)) {
-    return raw as CanalTurno;
-  }
-  const legacyMap: Record<string, CanalTurno> = {
-    panel: CanalTurno.interno,
-    voz: CanalTurno.telefono,
-    api: CanalTurno.agente_ia,
-  };
-  if (raw && legacyMap[raw]) {
-    return legacyMap[raw];
-  }
-  return CanalTurno.agente_ia;
 }
 
 async function resolveEmpresa(request: NextRequest) {
@@ -143,101 +118,7 @@ export async function POST(request: NextRequest) {
   const action = body.action as string;
 
   try {
-    const handler = async () => {
-      switch (action) {
-        case "crear_turno": {
-          const inicio = new Date(body.inicio);
-          assertNotPastInicio(inicio);
-          const turno = await createTurno({
-            empresaId: empresa.id,
-            tallerId: body.tallerId,
-            bahiaId: body.bahiaId,
-            clienteId: body.clienteId,
-            vehiculoId: body.vehiculoId,
-            servicioIds: body.servicioIds,
-            inicio,
-            canal: resolveCanal(body),
-            notas: body.notas,
-            confirmar: body.confirmar ?? true,
-          });
-          return { turno };
-        }
-        case "cancelar_turno": {
-          const turno = await cancelTurno({
-            turnoId: body.turnoId,
-            empresaId: empresa.id,
-            version: body.version,
-            motivo: body.motivo,
-          });
-          return { turno };
-        }
-        case "reprogramar_turno": {
-          const turno = await rescheduleTurno({
-            turnoId: body.turnoId,
-            empresaId: empresa.id,
-            bahiaId: body.bahiaId,
-            inicio: new Date(body.inicio),
-            version: body.version,
-          });
-          return { turno };
-        }
-        case "upsert_cliente": {
-          const cliente = await upsertCliente({
-            empresaId: empresa.id,
-            id: body.id,
-            nombre: body.nombre,
-            apellido: body.apellido,
-            email: body.email,
-            telefono: body.telefono,
-            documento: body.documento,
-          });
-          return { cliente: { id: cliente.id, nombre: cliente.nombre, apellido: cliente.apellido, telefono: cliente.telefono } };
-        }
-        case "upsert_vehiculo": {
-          const vehiculo = await upsertVehiculo({
-            empresaId: empresa.id,
-            patente: body.patente,
-            marca: body.marca,
-            modelo: body.modelo,
-            anio: body.anio,
-            color: body.color,
-            tipoVehiculo: body.tipoVehiculo,
-            condicion: body.condicion,
-            kilometrajeActual: body.kilometrajeActual,
-            clienteId: body.clienteId,
-          });
-          return { vehiculo };
-        }
-        case "clasificar_cliente": {
-          if (!body.clienteId || !body.clasificacion) {
-            throw new Error("clienteId y clasificacion requeridos");
-          }
-          const { perfil, evento } = await clasificarCliente({
-            empresaId: empresa.id,
-            clienteId: body.clienteId,
-            clasificacion: body.clasificacion,
-            intencion: body.intencion,
-            tagsDelta: body.tagsDelta,
-            scoreReclamosDelta: body.scoreReclamosDelta,
-            wahConversationId: body.wahConversationId,
-            wahMessageId: body.wahMessageId,
-            fuente: body.fuente ?? "integracion",
-            payload: body.payload,
-          });
-          return {
-            perfil: serializePerfilBuyer(perfil),
-            evento: {
-              id: evento.id,
-              clasificacion: evento.clasificacion,
-              intencion: evento.intencion,
-              createdAt: evento.createdAt.toISOString(),
-            },
-          };
-        }
-        default:
-          throw new Error("Acción no soportada");
-      }
-    };
+    const handler = () => dispatchAgentAction(action, empresa.id, body);
 
     if (idempotencyKey) {
       const { value, replay } = await withIdempotency({
