@@ -14,6 +14,18 @@ export interface TestFixture {
   vehiculoId: string;
   servicioId: string;
   slotInicio: Date;
+  userId?: string;
+}
+
+export async function createWahAccount(empresaId: string, suffix = "test") {
+  return prisma.whatsappAccount.create({
+    data: {
+      empresaId,
+      phoneNumberId: `phone_${suffix}`,
+      displayPhoneNumber: "+5491112345678",
+      label: `WA ${suffix}`,
+    },
+  });
 }
 
 export async function createTestFixture(suffix = Date.now().toString()): Promise<TestFixture> {
@@ -103,6 +115,10 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
 }
 
 export async function destroyTestFixture(empresaId: string) {
+  await prisma.wahMessage.deleteMany({ where: { empresaId } });
+  await prisma.wahConversation.deleteMany({ where: { empresaId } });
+  await prisma.wahMedia.deleteMany({ where: { empresaId } });
+  await prisma.whatsappAccount.deleteMany({ where: { empresaId } });
   await prisma.ocupacionBahia.deleteMany({
     where: { bahia: { taller: { empresaId } } },
   });

@@ -1,4 +1,11 @@
-import { PrismaClient, DiaSemana, EstadoTurno, CanalTurno, RolUsuario, ModoPrecio } from "@prisma/client";
+import {
+  PrismaClient,
+  DiaSemana,
+  EstadoTurno,
+  CanalTurno,
+  RolUsuario,
+  ModoPrecio,
+} from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 
@@ -12,6 +19,10 @@ function timeOnToday(h: number, m: number): Date {
 async function main() {
   console.log("🌱 Sembrando base de datos Montironi...");
 
+  await prisma.wahMessage.deleteMany();
+  await prisma.wahConversation.deleteMany();
+  await prisma.wahMedia.deleteMany();
+  await prisma.whatsappAccount.deleteMany();
   await prisma.eventoTurno.deleteMany();
   await prisma.detalleTurno.deleteMany();
   await prisma.ocupacionBahia.deleteMany();
@@ -316,6 +327,54 @@ async function main() {
       creadoPorUsuarioId: admin.id,
       activo: true,
     },
+  });
+
+  const waAccount = await prisma.whatsappAccount.create({
+    data: {
+      empresaId: empresa.id,
+      phoneNumberId: "PLACEHOLDER_PHONE_NUMBER_ID",
+      displayPhoneNumber: "+54 351 555-0100",
+      label: "Montironi Postventa (demo)",
+      wabaId: "demo-waba-placeholder",
+    },
+  });
+
+  const waConv = await prisma.wahConversation.create({
+    data: {
+      empresaId: empresa.id,
+      accountId: waAccount.id,
+      clienteId: clientes[0].id,
+      waContactId: "5493515551234@s.whatsapp.net",
+      contactName: `${clientes[0].nombre} ${clientes[0].apellido}`,
+      contactPhone: clientes[0].telefono,
+      lastMessageAt: new Date(),
+      lastMessagePreview: "Hola, quiero un turno para service",
+      unreadCount: 1,
+      pendingHuman: true,
+    },
+  });
+
+  await prisma.wahMessage.createMany({
+    data: [
+      {
+        empresaId: empresa.id,
+        conversationId: waConv.id,
+        direction: "inbound",
+        senderType: "contact",
+        messageType: "text",
+        body: "Hola, quiero un turno para service",
+        status: "received",
+      },
+      {
+        empresaId: empresa.id,
+        conversationId: waConv.id,
+        direction: "outbound",
+        senderType: "bot",
+        messageType: "text",
+        body: "¡Hola! ¿Qué patente es tu vehículo?",
+        status: "sent",
+      },
+    ],
   });
 
   console.log("✅ Seed completado");
