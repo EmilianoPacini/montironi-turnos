@@ -514,6 +514,7 @@ model WhatsappAccount {
 
   @@unique([empresaId, phoneNumberId], map: "whatsapp_accounts_empresa_phone_key")
   @@index([empresaId, active], map: "ix_whatsapp_accounts_empresa_active")
+  /// Partial UNIQUE index `whatsapp_accounts_user_id_uidx` (WHERE user_id IS NOT NULL) — see migration 182000
   @@map("whatsapp_accounts")
 }
 
