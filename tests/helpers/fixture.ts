@@ -140,6 +140,9 @@ export async function destroyTestFixture(empresaId: string) {
     where: { bahia: { taller: { empresaId } } },
   });
   await prisma.eventoTurno.deleteMany({ where: { turno: { empresaId } } });
+  await prisma.clienteClasificacionEvento.deleteMany({ where: { empresaId } });
+  await prisma.historialServicio.deleteMany({ where: { empresaId } });
+  await prisma.clientePerfilBuyer.deleteMany({ where: { empresaId } });
   await prisma.detalleTurno.deleteMany({ where: { turno: { empresaId } } });
   await prisma.movimiento.deleteMany({ where: { empresaId } });
   await prisma.turno.deleteMany({ where: { empresaId } });

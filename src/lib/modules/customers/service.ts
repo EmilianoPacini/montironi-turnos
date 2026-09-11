@@ -8,6 +8,8 @@ import {
 } from "@/lib/modules/customers/validation";
 import { waIdToE164 } from "@/lib/modules/wah/phone";
 import { DomainError } from "@/lib/modules/appointments/errors";
+import { listHistorialForCliente } from "@/lib/modules/historial/service";
+import { getPerfilBuyerForCliente, serializePerfilBuyer } from "@/lib/modules/buyer/service";
 
 export { ClienteValidationError };
 
@@ -156,6 +158,20 @@ export async function getClienteContext(params: { empresaId: string; id?: string
   );
   const realizados = mappedTurnos.filter((t) => t.estado === "finalizado");
 
+  const [historialRows, perfilBuyer] = await Promise.all([
+    listHistorialForCliente({
+      empresaId: params.empresaId,
+      clienteId: cliente.id,
+      limit: 10,
+    }),
+    getPerfilBuyerForCliente(params.empresaId, cliente.id),
+  ]);
+
+  const buyerProfile = perfilBuyer ? serializePerfilBuyer(perfilBuyer) : null;
+  const missing: string[] = [];
+  if (!buyerProfile) missing.push("buyer_profile");
+  if (historialRows.length === 0) missing.push("historial_services");
+
   return {
     id: cliente.id,
     nombre: cliente.nombre,
@@ -176,11 +192,13 @@ export async function getClienteContext(params: { empresaId: string; id?: string
       },
       vehiculos,
       turnos: { programados, realizados },
-      buyer_profile: null,
-      historial_services: null,
+      buyer_profile: buyerProfile,
+      perfilBuyer: buyerProfile,
+      historial_services: historialRows,
+      ultimosServices: historialRows,
       meta: {
-        partial: true,
-        missing: ["buyer_profile", "historial_services"],
+        partial: false,
+        missing,
         lookup,
       },
     },

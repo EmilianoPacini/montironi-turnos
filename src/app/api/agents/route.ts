@@ -12,6 +12,7 @@ import {
   httpStatusForDomainError,
 } from "@/lib/modules/appointments/service";
 import { upsertCliente, upsertVehiculo, getClienteContext } from "@/lib/modules/customers/service";
+import { clasificarCliente, serializePerfilBuyer } from "@/lib/modules/buyer/service";
 import { ClienteValidationError } from "@/lib/modules/customers/validation";
 import { CanalTurno } from "@prisma/client";
 
@@ -206,6 +207,32 @@ export async function POST(request: NextRequest) {
             clienteId: body.clienteId,
           });
           return { vehiculo };
+        }
+        case "clasificar_cliente": {
+          if (!body.clienteId || !body.clasificacion) {
+            throw new Error("clienteId y clasificacion requeridos");
+          }
+          const { perfil, evento } = await clasificarCliente({
+            empresaId: empresa.id,
+            clienteId: body.clienteId,
+            clasificacion: body.clasificacion,
+            intencion: body.intencion,
+            tagsDelta: body.tagsDelta,
+            scoreReclamosDelta: body.scoreReclamosDelta,
+            wahConversationId: body.wahConversationId,
+            wahMessageId: body.wahMessageId,
+            fuente: body.fuente ?? "integracion",
+            payload: body.payload,
+          });
+          return {
+            perfil: serializePerfilBuyer(perfil),
+            evento: {
+              id: evento.id,
+              clasificacion: evento.clasificacion,
+              intencion: evento.intencion,
+              createdAt: evento.createdAt.toISOString(),
+            },
+          };
         }
         default:
           throw new Error("Acción no soportada");

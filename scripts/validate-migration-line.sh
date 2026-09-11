@@ -35,9 +35,9 @@ if [[ "$WAH" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$COUNT" != "3" ]]; then
-  echo "FAIL: expected 3 migrations on fresh branch, found $COUNT"
+if [[ "$COUNT" != "4" ]]; then
+  echo "FAIL: expected 4 migrations on fresh branch, found $COUNT"
   exit 1
 fi
 
-echo "PASS: clean migration line (152→170→182)"
+echo "PASS: clean migration line (152→170→182→207)"
