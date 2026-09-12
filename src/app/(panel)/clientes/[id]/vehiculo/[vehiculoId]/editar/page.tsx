@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
 import { getCliente, getVehiculoForCliente } from "@/lib/modules/customers/service";
-import { saveVehiculoAction } from "@/lib/modules/appointments/actions";
 import { VehiculoForm } from "@/components/clientes/VehiculoForm";
 
 export default async function EditarVehiculoPage({
@@ -30,7 +29,7 @@ export default async function EditarVehiculoPage({
       <p className="panel-subtitle">Patente {vehiculo.patente}</p>
       <div className="mt-6">
         <VehiculoForm
-          action={saveVehiculoAction}
+          key={vehiculo.patente}
           clienteId={id}
           vehiculo={vehiculo}
           submitLabel="Guardar cambios"

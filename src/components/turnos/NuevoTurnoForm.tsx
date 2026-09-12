@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { format } from "date-fns";
-import { createTurnoAction, createClienteInlineAction, createVehiculoInlineAction } from "@/lib/modules/appointments/actions";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import {
+  createTurnoAction,
+  type TurnoFormState,
+} from "@/lib/modules/appointments/actions";
 import { MODO_PRECIO_LABELS } from "@/lib/modules/appointments/constants";
 import { FormError } from "@/components/ui/FormError";
-import { VehiculoFields } from "@/components/clientes/VehiculoFields";
-import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
+import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
+import { InlineClienteModal } from "@/components/clientes/InlineClienteModal";
+import { InlineVehiculoModal } from "@/components/clientes/InlineVehiculoModal";
 
 interface ClienteOption {
   id: string;
@@ -28,6 +32,27 @@ interface BahiaOption {
   nombre: string;
 }
 
+function splitInicio(inicio: string | undefined, defaultInicio?: string) {
+  if (inicio) {
+    const date = parseISO(inicio);
+    return {
+      fecha: format(date, "yyyy-MM-dd"),
+      hora: format(date, "HH:mm"),
+    };
+  }
+  if (defaultInicio) {
+    const date = new Date(defaultInicio);
+    return {
+      fecha: format(date, "yyyy-MM-dd"),
+      hora: format(date, "HH:mm"),
+    };
+  }
+  return {
+    fecha: format(new Date(), "yyyy-MM-dd"),
+    hora: "09:00",
+  };
+}
+
 export function NuevoTurnoForm({
   tallerId,
   clientes: initialClientes,
@@ -35,7 +60,6 @@ export function NuevoTurnoForm({
   compatibleBahias,
   defaultBahiaId,
   defaultInicio,
-  error,
 }: {
   tallerId: string;
   clientes: ClienteOption[];
@@ -43,22 +67,58 @@ export function NuevoTurnoForm({
   compatibleBahias: BahiaOption[];
   defaultBahiaId?: string;
   defaultInicio?: string;
-  error?: string;
 }) {
+  const initialSchedule = splitInicio(undefined, defaultInicio);
+  const [state, formAction, pending] = useActionState(
+    createTurnoAction,
+    undefined as TurnoFormState | undefined
+  );
+
   const [clientes, setClientes] = useState(initialClientes);
   const [clienteId, setClienteId] = useState("");
   const [vehiculoId, setVehiculoId] = useState("");
-  const [fecha, setFecha] = useState(
-    defaultInicio ? format(new Date(defaultInicio), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")
-  );
-  const [hora, setHora] = useState(
-    defaultInicio ? format(new Date(defaultInicio), "HH:mm") : "09:00"
-  );
-  const [formError, setFormError] = useState<string | undefined>(error);
+  const [servicioIds, setServicioIds] = useState<string[]>([]);
+  const [bahiaId, setBahiaId] = useState(defaultBahiaId ?? "");
+  const [fecha, setFecha] = useState(initialSchedule.fecha);
+  const [hora, setHora] = useState(initialSchedule.hora);
+  const [kilometraje, setKilometraje] = useState("");
+  const [notas, setNotas] = useState("");
+  const [confirmar, setConfirmar] = useState(false);
+  const [inlineError, setInlineError] = useState<string | undefined>();
+  const [localFieldErrors, setLocalFieldErrors] = useState<Partial<Record<string, string>>>({});
+  const [localFocusKey, setLocalFocusKey] = useState<number | undefined>();
   const [showClienteModal, setShowClienteModal] = useState(false);
   const [showVehiculoModal, setShowVehiculoModal] = useState(false);
-  const [clientePending, setClientePending] = useState(false);
-  const [vehiculoPending, setVehiculoPending] = useState(false);
+
+  useEffect(() => {
+    if (!state?.values) return;
+    const v = state.values;
+    setClienteId(v.clienteId);
+    setVehiculoId(v.vehiculoId);
+    setServicioIds(v.servicioIds);
+    setBahiaId(v.bahiaId);
+    const schedule = splitInicio(v.inicio);
+    setFecha(schedule.fecha);
+    setHora(schedule.hora);
+    setKilometraje(v.kilometraje);
+    setNotas(v.notas);
+    setConfirmar(v.confirmar);
+    setLocalFieldErrors({});
+  }, [state?.formKey]);
+
+  const errorState =
+    state?.formKey != null
+      ? state
+      : Object.keys(localFieldErrors).length > 0
+        ? {
+            formKey: localFocusKey,
+            focusField: Object.keys(localFieldErrors)[0],
+            fieldErrors: localFieldErrors,
+          }
+        : undefined;
+  const { fieldClass, FieldErrorMessage } = useFormFieldErrors(errorState);
+
+  const formError = state?.error ?? inlineError;
 
   const vehiculos = useMemo(() => {
     const cliente = clientes.find((c) => c.id === clienteId);
@@ -68,80 +128,48 @@ export function NuevoTurnoForm({
   function handleClienteChange(id: string) {
     setClienteId(id);
     setVehiculoId("");
+    setInlineError(undefined);
+    setLocalFieldErrors({});
   }
 
-  async function handleInlineCliente(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setClientePending(true);
-    const fd = new FormData(e.currentTarget);
-    const result = await createClienteInlineAction(fd);
-    setClientePending(false);
-    if ("error" in result) {
-      setFormError(result.error);
-      return;
-    }
-    setClientes((prev) => [...prev, result.cliente]);
-    setClienteId(result.cliente.id);
-    setShowClienteModal(false);
-    setFormError(undefined);
-  }
-
-  async function handleInlineVehiculo(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!clienteId) return;
-    setVehiculoPending(true);
-    const fd = new FormData(e.currentTarget);
-    fd.set("clienteId", clienteId);
-    const result = await createVehiculoInlineAction(fd);
-    setVehiculoPending(false);
-    if ("error" in result) {
-      setFormError(result.error);
-      return;
-    }
-    setClientes((prev) =>
-      prev.map((c) =>
-        c.id === clienteId
-          ? {
-              ...c,
-              vehiculos: [
-                ...c.vehiculos,
-                {
-                  vehiculoId: result.vehiculo.id,
-                  vehiculo: { patente: result.vehiculo.patente, marca: result.vehiculo.marca },
-                },
-              ],
-            }
-          : c
-      )
+  function toggleServicio(id: string, checked: boolean) {
+    setServicioIds((prev) =>
+      checked ? [...prev, id] : prev.filter((value) => value !== id)
     );
-    setVehiculoId(result.vehiculo.id);
-    setShowVehiculoModal(false);
+    setInlineError(undefined);
+    setLocalFieldErrors((prev) => {
+      if (!prev.servicioIds) return prev;
+      const next = { ...prev };
+      delete next.servicioIds;
+      return next;
+    });
   }
 
   return (
     <>
       <form
-        action={createTurnoAction}
+        action={formAction}
         className="mt-6 max-w-2xl space-y-4"
         onSubmit={(e) => {
-          const form = e.currentTarget;
-          const checked = form.querySelectorAll<HTMLInputElement>(
-            'input[name="servicioIds"]:checked'
-          );
-          if (checked.length === 0) {
+          if (servicioIds.length === 0) {
             e.preventDefault();
-            setFormError("Seleccioná al menos un servicio");
+            const message = "Seleccioná al menos un servicio";
+            setInlineError(message);
+            setLocalFieldErrors({ servicioIds: message });
+            setLocalFocusKey(Date.now());
             return;
           }
-          const inicioHidden = form.querySelector<HTMLInputElement>('input[name="inicio"]');
-          if (inicioHidden) {
-            inicioHidden.value = `${fecha}T${hora}:00`;
-          }
+          setInlineError(undefined);
+          setLocalFieldErrors({});
         }}
       >
         <FormError message={formError} />
         <input type="hidden" name="tallerId" value={tallerId} />
         <input type="hidden" name="inicio" value={`${fecha}T${hora}:00`} />
+        {servicioIds.map((id) => (
+          <input key={id} type="hidden" name="servicioIds" value={id} />
+        ))}
+        {confirmar ? <input type="hidden" name="confirmar" value="true" /> : null}
 
         <div className="flex items-end gap-2">
           <label className="block flex-1 text-sm">
@@ -149,9 +177,13 @@ export function NuevoTurnoForm({
             <select
               name="clienteId"
               required
+              data-field="clienteId"
               value={clienteId}
               onChange={(e) => handleClienteChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "clienteId",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             >
               <option value="">Seleccionar...</option>
               {clientes.map((c) => (
@@ -176,9 +208,17 @@ export function NuevoTurnoForm({
             <select
               name="vehiculoId"
               required
+              data-field="vehiculoId"
               value={vehiculoId}
-              onChange={(e) => setVehiculoId(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              onChange={(e) => {
+                setVehiculoId(e.target.value);
+                setInlineError(undefined);
+                setLocalFieldErrors({});
+              }}
+              className={fieldClass(
+                "vehiculoId",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
               disabled={!clienteId}
             >
               <option value="">
@@ -204,10 +244,21 @@ export function NuevoTurnoForm({
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Servicios</legend>
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+          <div
+            data-field="servicioIds"
+            tabIndex={-1}
+            className={fieldClass(
+              "servicioIds",
+              "space-y-2 rounded-lg border border-slate-200 p-3 outline-none"
+            )}
+          >
             {servicios.map((s) => (
               <label key={s.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="servicioIds" value={s.id} />
+                <input
+                  type="checkbox"
+                  checked={servicioIds.includes(s.id)}
+                  onChange={(e) => toggleServicio(s.id, e.target.checked)}
+                />
                 <span>
                   {s.nombre} ({s.duracionMin} min) ·{" "}
                   {MODO_PRECIO_LABELS[s.modoPrecio] ?? s.modoPrecio}
@@ -215,14 +266,20 @@ export function NuevoTurnoForm({
               </label>
             ))}
           </div>
+          <FieldErrorMessage field="servicioIds" />
         </fieldset>
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Bahía</span>
           <select
             name="bahiaId"
-            defaultValue={defaultBahiaId ?? ""}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            data-field="bahiaId"
+            value={bahiaId}
+            onChange={(e) => setBahiaId(e.target.value)}
+            className={fieldClass(
+              "bahiaId",
+              "w-full rounded-lg border border-slate-300 px-3 py-2"
+            )}
           >
             <option value="">Automático</option>
             {compatibleBahias.map((b) => (
@@ -231,6 +288,7 @@ export function NuevoTurnoForm({
               </option>
             ))}
           </select>
+          <FieldErrorMessage field="bahiaId" />
         </label>
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -239,20 +297,30 @@ export function NuevoTurnoForm({
             <input
               type="date"
               required
+              data-field="fecha"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "fecha",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             />
+            <FieldErrorMessage field="fecha" />
           </label>
           <label className="block text-sm sm:col-span-1">
             <span className="mb-1 block font-medium">Hora</span>
             <input
               type="time"
               required
+              data-field="hora"
               value={hora}
               onChange={(e) => setHora(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={fieldClass(
+                "hora",
+                "w-full rounded-lg border border-slate-300 px-3 py-2"
+              )}
             />
+            <FieldErrorMessage field="hora" />
           </label>
           <label className="block text-sm sm:col-span-1">
             <span className="mb-1 block font-medium">Km al turno</span>
@@ -260,6 +328,8 @@ export function NuevoTurnoForm({
               name="kilometraje"
               type="number"
               min={0}
+              value={kilometraje}
+              onChange={(e) => setKilometraje(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
             />
           </label>
@@ -267,61 +337,68 @@ export function NuevoTurnoForm({
 
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Notas</span>
-          <textarea name="notas" rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+          <textarea
+            name="notas"
+            rows={3}
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
         </label>
 
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="confirmar" value="true" />
+          <input
+            type="checkbox"
+            checked={confirmar}
+            onChange={(e) => setConfirmar(e.target.checked)}
+          />
           Confirmar inmediatamente
         </label>
 
         <button
           type="submit"
+          disabled={pending}
           className="btn-primary-lg"
         >
-          Crear turno
+          {pending ? "Creando..." : "Crear turno"}
         </button>
       </form>
 
-      {showClienteModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={handleInlineCliente} className="w-full max-w-md space-y-3 rounded-xl bg-white p-5 shadow-lg">
-            <h3 className="font-semibold">Nuevo cliente</h3>
-            <ClienteCoreFields className="w-full rounded border px-3 py-2" />
-            <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={clientePending} className="btn-primary">Guardar</button>
-              <button type="button" onClick={() => setShowClienteModal(false)} className="rounded border px-4 py-2 text-sm">Cancelar</button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <InlineClienteModal
+        open={showClienteModal}
+        onClose={() => setShowClienteModal(false)}
+        onCreated={(cliente) => {
+          setClientes((prev) => [...prev, cliente]);
+          setClienteId(cliente.id);
+          setInlineError(undefined);
+        }}
+      />
 
-      {showVehiculoModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <form
-            onSubmit={handleInlineVehiculo}
-            className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl"
-          >
-            <h3 className="text-lg font-semibold text-slate-900">Nuevo vehículo</h3>
-            <p className="text-sm text-slate-600">
-              Mismos campos que en la ficha del cliente.
-            </p>
-            <VehiculoFields />
-            <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={vehiculoPending} className="btn-primary">
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowVehiculoModal(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <InlineVehiculoModal
+        open={showVehiculoModal}
+        clienteId={clienteId}
+        onClose={() => setShowVehiculoModal(false)}
+        onCreated={(vehiculo) => {
+          setClientes((prev) =>
+            prev.map((c) =>
+              c.id === clienteId
+                ? {
+                    ...c,
+                    vehiculos: [
+                      ...c.vehiculos,
+                      {
+                        vehiculoId: vehiculo.id,
+                        vehiculo: { patente: vehiculo.patente, marca: vehiculo.marca },
+                      },
+                    ],
+                  }
+                : c
+            )
+          );
+          setVehiculoId(vehiculo.id);
+          setInlineError(undefined);
+        }}
+      />
     </>
   );
 }

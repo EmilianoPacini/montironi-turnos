@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
 import { getCliente } from "@/lib/modules/customers/service";
-import { saveVehiculoAction } from "@/lib/modules/appointments/actions";
 import { VehiculoForm } from "@/components/clientes/VehiculoForm";
 
 export default async function NuevoVehiculoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +24,7 @@ export default async function NuevoVehiculoPage({ params }: { params: Promise<{ 
       </p>
       <div className="mt-6">
         <VehiculoForm
-          action={saveVehiculoAction}
+          key="nuevo"
           clienteId={id}
           submitLabel="Guardar vehículo"
           cancelHref={`/clientes/${id}#vehiculos`}

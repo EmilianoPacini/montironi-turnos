@@ -1,27 +1,22 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
 import { getTurnoById } from "@/lib/modules/appointments/service";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { getAvailabilityForDate } from "@/lib/modules/availability/service";
-import { rescheduleTurnoAction } from "@/lib/modules/appointments/actions";
 import { isActiveEstado } from "@/lib/modules/appointments/constants";
-import { FormError } from "@/components/ui/FormError";
 import { AvailabilitySlotsPanel } from "@/components/turnos/AvailabilitySlotsPanel";
+import { ReprogramarForm } from "@/components/turnos/ReprogramarForm";
 
 export default async function ReprogramarPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await getAuthSession();
 
   const { id } = await params;
-  const query = await searchParams;
-  const error = typeof query.error === "string" ? query.error : undefined;
   const turno = await getTurnoById(id, session.empresaId);
   if (!turno || !isActiveEstado(turno.estado)) notFound();
 
@@ -50,47 +45,13 @@ export default async function ReprogramarPage({
         Si hay conflicto, se mantiene el horario anterior.
       </p>
 
-      <FormError message={error} />
-
-      <form action={rescheduleTurnoAction} className="mt-6 max-w-xl space-y-4">
-        <input type="hidden" name="turnoId" value={turno.id} />
-        <input type="hidden" name="version" value={turno.version} />
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Bahía</span>
-          <select name="bahiaId" defaultValue={turno.bahiaId} className="w-full rounded-lg border px-3 py-2">
-            <option value="">
-              Automático — asignar si hay exactamente una bahía compatible libre
-            </option>
-            {bahias.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nombre}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Selección manual siempre permitida. Automático solo cuando hay una bahía libre.
-          </p>
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Nuevo inicio</span>
-          <input
-            type="datetime-local"
-            name="inicio"
-            required
-            defaultValue={format(turno.inicio, "yyyy-MM-dd'T'HH:mm")}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-
-        <button
-          type="submit"
-          className="btn-primary-lg"
-        >
-          Reprogramar
-        </button>
-      </form>
+      <ReprogramarForm
+        turnoId={turno.id}
+        version={turno.version}
+        defaultBahiaId={turno.bahiaId}
+        defaultInicio={format(turno.inicio, "yyyy-MM-dd'T'HH:mm")}
+        bahias={bahias}
+      />
 
       <AvailabilitySlotsPanel
         availability={availability}

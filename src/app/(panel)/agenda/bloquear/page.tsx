@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { parseISO, startOfDay, addHours } from "date-fns";
 import { getAuthSession } from "@/lib/auth/session";
 import { listTalleres } from "@/lib/modules/catalog/service";
-import { blockBahiaAction } from "@/lib/modules/appointments/actions";
-import { FormError } from "@/components/ui/FormError";
+import { BloquearForm } from "@/components/agenda/BloquearForm";
 
 export default async function BloquearPage({
   searchParams,
@@ -22,7 +20,8 @@ export default async function BloquearPage({
     typeof params.fecha === "string" ? params.fecha : new Date().toISOString().slice(0, 10);
   const date = startOfDay(parseISO(dateStr));
   const bahias = talleres.find((t) => t.id === tallerId)?.bahias ?? [];
-  const error = typeof params.error === "string" ? params.error : undefined;
+  const defaultBahiaId =
+    typeof params.bahiaId === "string" ? params.bahiaId : bahias[0]?.id ?? "";
 
   const inicioDefault = addHours(date, 12).toISOString().slice(0, 16);
   const finDefault = addHours(date, 13).toISOString().slice(0, 16);
@@ -38,47 +37,12 @@ export default async function BloquearPage({
         rechazan.
       </p>
 
-      <FormError message={error} />
-
-      <form action={blockBahiaAction} className="mt-6 max-w-md space-y-4">
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Bahía</span>
-          <select name="bahiaId" required className="w-full rounded-lg border px-3 py-2">
-            {bahias.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Inicio</span>
-          <input
-            type="datetime-local"
-            name="inicio"
-            required
-            defaultValue={inicioDefault}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Fin</span>
-          <input
-            type="datetime-local"
-            name="fin"
-            required
-            defaultValue={finDefault}
-            className="w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Motivo</span>
-          <input name="motivo" required className="w-full rounded-lg border px-3 py-2" />
-        </label>
-        <button type="submit" className="btn-primary-lg">
-          Bloquear
-        </button>
-      </form>
+      <BloquearForm
+        bahias={bahias}
+        defaultBahiaId={defaultBahiaId}
+        defaultInicio={inicioDefault}
+        defaultFin={finDefault}
+      />
     </div>
   );
 }

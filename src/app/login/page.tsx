@@ -12,13 +12,13 @@ export default function LoginPage() {
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-700 via-blue-600 to-sky-500 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl shadow-blue-900/10">
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-lg shadow-slate-900/5">
         <div className="mb-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wider text-sky-600">
+          <p className="text-sm font-semibold uppercase tracking-wider text-sky-700">
             Montironi
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-blue-700">Cima AI</h1>
+          <h1 className="mt-1 text-2xl font-bold text-slate-900">Cima AI</h1>
           <p className="mt-2 text-sm text-slate-600">
             Agenda compartida para taller y agentes
           </p>
@@ -63,8 +63,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 rounded-lg bg-sky-50 p-3 text-xs text-slate-600">
-          <p className="font-medium text-sky-900">Usuarios de prueba:</p>
+        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="font-medium text-slate-800">Usuarios de prueba:</p>
           <p>Admin: admin@montironi.com / admin123</p>
           <p>Empleado: empleado@montironi.com / empleado123</p>
         </div>
