@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listTalleres } from "@/lib/modules/catalog/service";
 import { listBahiasTaller } from "@/lib/modules/catalog/bahia.service";
 import { saveBahiaAction } from "@/lib/modules/appointments/actions";
@@ -9,7 +7,6 @@ import Link from "next/link";
 
 export default async function BahiasPage() {
   const session = await getAuthSession();
-  if (!canAccessPanelRoute(session.rol, "/bahias")) redirect("/agenda");
 
   const talleres = await listTalleres(session.empresaId);
   const tallerId = talleres[0]?.id;

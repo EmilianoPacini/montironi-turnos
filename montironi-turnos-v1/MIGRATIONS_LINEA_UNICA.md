@@ -7,6 +7,7 @@
 | 1 | `20260911152000_authoritative_init` | Init base Montironi |
 | 2 | `20260911170000_v11_clients_vehicles_movimientos` | Clientes, vehículos, movimientos |
 | 3 | `20260911182000_wah_comunicaciones_005` | WAH — alineado Datos `005_comunicaciones_wah.sql` |
+| 4 | `20260911200700_historial_y_buyer` | Historial servicio + buyer profile — Datos `007_historial_y_buyer.sql` |
 
 **No usar** la cadena divergente de `main` @ `d8592c8` (PR #4):
 
@@ -35,7 +36,7 @@ Requisitos PASS:
 ## QA — verificación fresh DB
 
 ```bash
-npx prisma migrate reset --force   # 3 migraciones + seed
+npx prisma migrate reset --force   # 4 migraciones + seed
 npm test
 bash scripts/validate-migration-line.sh
 bash scripts/validate-wah-schema.sh
@@ -45,10 +46,10 @@ Resultado esperado en branch limpio:
 
 | Gate | Esperado |
 |------|----------|
-| `_prisma_migrations` | exactamente 3 filas (152→170→182) |
+| `_prisma_migrations` | exactamente 4 filas (152→170→182→207) |
 | WAH migrations | 1 sola (`182000`) — sin 71000/80000/81000 |
 | Seed | verde (`condicion` en `servicio_intervalo_km`) |
-| Tests | 58/58 |
+| Tests | 67/67 (incl. historial-buyer) |
 
 ## DBs sucias (columna condicion)
 

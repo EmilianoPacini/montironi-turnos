@@ -1,4 +1,5 @@
 import prisma from "@/lib/db";
+import { DomainError } from "@/lib/modules/appointments/errors";
 
 export async function listServicios(empresaId: string) {
   return prisma.servicio.findMany({
@@ -45,15 +46,33 @@ export async function getTaller(id: string, empresaId: string) {
   });
 }
 
-export async function getConfiguracionTaller(tallerId: string) {
+export async function getConfiguracionTaller(tallerId: string, empresaId: string) {
+  const taller = await prisma.taller.findFirst({
+    where: { id: tallerId, empresaId },
+    select: { id: true },
+  });
+  if (!taller) {
+    throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
+  }
   return prisma.configuracionTurnos.findUnique({ where: { tallerId } });
 }
 
-export async function updateConfiguracionTaller(tallerId: string, margenMinutos: number) {
+export async function updateConfiguracionTaller(params: {
+  tallerId: string;
+  empresaId: string;
+  margenMinutos: number;
+}) {
+  const taller = await prisma.taller.findFirst({
+    where: { id: params.tallerId, empresaId: params.empresaId },
+  });
+  if (!taller) {
+    throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
+  }
+
   return prisma.configuracionTurnos.upsert({
-    where: { tallerId },
-    create: { tallerId, margenMinutos },
-    update: { margenMinutos },
+    where: { tallerId: params.tallerId },
+    create: { tallerId: params.tallerId, margenMinutos: params.margenMinutos },
+    update: { margenMinutos: params.margenMinutos },
   });
 }
 
@@ -66,6 +85,13 @@ export async function createServicio(params: {
   precio: number;
   modoPrecio?: "fijo" | "desde" | "a_presupuestar";
 }) {
+  const tipoServicio = await prisma.tipoServicio.findFirst({
+    where: { id: params.tipoServicioId, empresaId: params.empresaId },
+  });
+  if (!tipoServicio) {
+    throw new DomainError("Tipo de servicio no encontrado", "RecursoNoEncontrado");
+  }
+
   return prisma.servicio.create({
     data: {
       empresaId: params.empresaId,

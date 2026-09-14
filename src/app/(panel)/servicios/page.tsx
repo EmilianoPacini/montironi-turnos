@@ -1,14 +1,10 @@
-import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth/session";
-import { canAccessPanelRoute } from "@/lib/auth/guards";
 import { listServicios, listTiposServicio } from "@/lib/modules/catalog/service";
 import { saveServicioAction, saveIntervaloAction } from "@/lib/modules/appointments/actions";
 import { AdminOnlyBanner } from "@/components/layout/AdminOnlyBanner";
 
 export default async function ServiciosPage() {
   const session = await getAuthSession();
-
-  if (!canAccessPanelRoute(session.rol, "/servicios")) redirect("/agenda");
 
   const [servicios, tipos] = await Promise.all([
     listServicios(session.empresaId),

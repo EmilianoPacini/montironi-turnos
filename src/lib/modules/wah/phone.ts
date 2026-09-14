@@ -19,3 +19,10 @@ export function previewText(text: string, max = 120): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`;
 }
+
+/** Meta wa_id or JID → E.164 (+digits). */
+export function waIdToE164(waId: string): string {
+  const raw = waId.trim();
+  const beforeAt = raw.includes("@") ? raw.split("@")[0]! : raw;
+  return normalizeContactPhone(beforeAt.startsWith("+") ? beforeAt : `+${beforeAt.replace(/\D/g, "")}`);
+}

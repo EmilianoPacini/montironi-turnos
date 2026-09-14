@@ -120,6 +120,10 @@ model Empresa {
   wahConversations   WahConversation[]
   wahMessages        WahMessage[]
   wahMedia           WahMedia[]
+  sesiones           Sesion[]
+  historialServicios HistorialServicio[]
+  perfilesBuyer      ClientePerfilBuyer[]
+  clasificacionEventos ClienteClasificacionEvento[]
 
   @@map("empresa")
 }
@@ -142,9 +146,30 @@ model Usuario {
   movimientos   Movimiento[]
   wahMessagesSent       WahMessage[]      @relation("WahMessageSender")
   whatsappAccountsOwned WhatsappAccount[] @relation("WahAccountOwner")
+  sesiones              Sesion[]
+  clasificacionesActor  ClienteClasificacionEvento[]
 
   @@unique([empresaId, email])
   @@map("usuario")
+}
+
+model Sesion {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId  String    @map("usuario_id") @db.Uuid
+  empresaId  String    @map("empresa_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  userAgent  String?   @map("user_agent")
+  ip         String?   @map("ip")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiresAt])
+  @@map("sesion")
 }
 
 model Taller {
@@ -163,6 +188,7 @@ model Taller {
   excepciones     ExcepcionHorario[]
   turnos          Turno[]
   configuracion   ConfiguracionTurnos?
+  historialServicios HistorialServicio[]
 
   @@map("taller")
 }
@@ -194,6 +220,7 @@ model TipoServicio {
 
   empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   servicios Servicio[]
+  historialServicios HistorialServicio[]
 
   @@map("tipo_servicio")
 }
@@ -217,6 +244,7 @@ model Servicio {
   bahiaServicios BahiaServicio[]
   detallesTurno   DetalleTurno[]
   intervalosKm    ServicioIntervaloKm[]
+  historialServicios HistorialServicio[]
 
   @@map("servicio")
 }
@@ -314,6 +342,9 @@ model Cliente {
   documentos       DocumentoCliente[]
   turnos           Turno[]
   wahConversations WahConversation[]
+  historialServicios HistorialServicio[]
+  perfilBuyer        ClientePerfilBuyer?
+  clasificacionEventos ClienteClasificacionEvento[]
 
   @@index([empresaId, telefono])
   @@map("cliente")
@@ -336,6 +367,7 @@ model Vehiculo {
   empresa  Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   clientes ClienteVehiculo[]
   turnos   Turno[]
+  historialServicios HistorialServicio[]
 
   @@unique([empresaId, patente])
   @@map("vehiculo")
@@ -410,6 +442,7 @@ model Turno {
   detalles    DetalleTurno[]
   ocupaciones OcupacionBahia[]
   eventos     EventoTurno[]
+  historial   HistorialServicio[]
 
   @@index([empresaId, inicio])
   @@index([bahiaId, inicio])
@@ -428,6 +461,7 @@ model DetalleTurno {
 
   turno    Turno    @relation(fields: [turnoId], references: [id], onDelete: Cascade)
   servicio Servicio @relation(fields: [servicioId], references: [id])
+  historial HistorialServicio?
 
   @@map("detalle_turno")
 }
@@ -542,6 +576,8 @@ model WahConversation {
   account  WhatsappAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   cliente  Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   messages WahMessage[]
+  perfilesBuyer ClientePerfilBuyer[]
+  clasificacionEventos ClienteClasificacionEvento[]
 
   @@unique([accountId, waContactId], map: "wah_conversations_account_contact_key")
   @@index([empresaId, lastMessageAt(sort: Desc)], map: "ix_wah_conversations_empresa_last_message")
@@ -593,8 +629,100 @@ model WahMessage {
   conversation WahConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderUser   Usuario?        @relation("WahMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
   media        WahMedia?
+  clasificacionEventos ClienteClasificacionEvento[]
 
   @@index([conversationId, createdAt(sort: Asc)], map: "ix_wah_messages_conversation_created")
   @@index([empresaId, createdAt(sort: Desc)], map: "ix_wah_messages_empresa_created")
   @@map("wah_messages")
+}
+
+model HistorialServicio {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  clienteId          String   @map("cliente_id") @db.Uuid
+  vehiculoId         String   @map("vehiculo_id") @db.Uuid
+  turnoId            String   @map("turno_id") @db.Uuid
+  detalleTurnoId     String   @unique @map("detalle_turno_id") @db.Uuid
+  tallerId           String   @map("taller_id") @db.Uuid
+  servicioId         String   @map("servicio_id") @db.Uuid
+  tipoServicioId     String?  @map("tipo_servicio_id") @db.Uuid
+  servicioNombre     String   @map("servicio_nombre")
+  tipoServicioNombre String?  @map("tipo_servicio_nombre")
+  tallerNombre       String?  @map("taller_nombre")
+  realizadoEn        DateTime @map("realizado_en") @db.Timestamptz(6)
+  kilometrajeKm      Int?     @map("kilometraje_km")
+  duracionMinutos    Int?     @map("duracion_minutos")
+  precio             Decimal? @db.Decimal(12, 2)
+  moneda             String   @default("ARS")
+  resultado          String   @default("realizado")
+  notas              String?
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cliente      Cliente       @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  vehiculo     Vehiculo      @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
+  turno        Turno         @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  detalleTurno DetalleTurno  @relation(fields: [detalleTurnoId], references: [id], onDelete: Restrict)
+  taller       Taller        @relation(fields: [tallerId], references: [id], onDelete: Restrict)
+  servicio     Servicio      @relation(fields: [servicioId], references: [id], onDelete: Restrict)
+  tipoServicio TipoServicio? @relation(fields: [tipoServicioId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, clienteId, realizadoEn(sort: Desc)], map: "ix_historial_servicio_cliente_realizado")
+  @@index([empresaId, vehiculoId, realizadoEn(sort: Desc)], map: "ix_historial_servicio_vehiculo_realizado")
+  @@index([turnoId], map: "ix_historial_servicio_turno")
+  @@index([empresaId, servicioId, realizadoEn(sort: Desc)], map: "ix_historial_servicio_servicio")
+  @@map("historial_servicio")
+}
+
+model ClientePerfilBuyer {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId             String    @map("empresa_id") @db.Uuid
+  clienteId             String    @unique @map("cliente_id") @db.Uuid
+  tags                  String[]  @default([])
+  intencionPredominante String?   @map("intencion_predominante")
+  scoreReclamos         Int       @default(0) @map("score_reclamos")
+  ultimaClasificacion   String?   @map("ultima_clasificacion")
+  ultimaClasificacionEn DateTime? @map("ultima_clasificacion_en") @db.Timestamptz(6)
+  wahConversationId     String?   @map("wah_conversation_id") @db.Uuid
+  metadata              Json?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa          Empresa                    @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cliente          Cliente                    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  wahConversation  WahConversation?           @relation(fields: [wahConversationId], references: [id], onDelete: SetNull)
+  clasificacionEventos ClienteClasificacionEvento[]
+
+  @@index([empresaId], map: "ix_cliente_perfil_buyer_empresa")
+  @@index([empresaId, intencionPredominante], map: "ix_cliente_perfil_buyer_intencion")
+  @@index([wahConversationId], map: "ix_cliente_perfil_buyer_wah")
+  @@map("cliente_perfil_buyer")
+}
+
+model ClienteClasificacionEvento {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  clienteId          String   @map("cliente_id") @db.Uuid
+  perfilId           String?  @map("perfil_id") @db.Uuid
+  wahConversationId  String?  @map("wah_conversation_id") @db.Uuid
+  wahMessageId       String?  @map("wah_message_id") @db.Uuid
+  fuente             String   @default("bot")
+  clasificacion      String
+  intencion          String?
+  tagsDelta          String[] @map("tags_delta")
+  scoreReclamosDelta Int      @default(0) @map("score_reclamos_delta")
+  payload            Json?
+  actorUsuarioId     String?  @map("actor_usuario_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa         Empresa              @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cliente         Cliente              @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  perfil          ClientePerfilBuyer?  @relation(fields: [perfilId], references: [id], onDelete: SetNull)
+  wahConversation WahConversation?     @relation(fields: [wahConversationId], references: [id], onDelete: SetNull)
+  wahMessage      WahMessage?          @relation(fields: [wahMessageId], references: [id], onDelete: SetNull)
+  actorUsuario    Usuario?             @relation(fields: [actorUsuarioId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, clienteId, createdAt(sort: Desc)], map: "ix_cliente_clasificacion_evento_cliente")
+  @@index([wahConversationId, createdAt(sort: Desc)], map: "ix_cliente_clasificacion_evento_conv")
+  @@map("cliente_clasificacion_evento")
 }

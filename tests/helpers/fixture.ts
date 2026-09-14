@@ -13,6 +13,7 @@ export interface TestFixture {
   clienteId: string;
   vehiculoId: string;
   servicioId: string;
+  tipoServicioId: string;
   slotInicio: Date;
   userId?: string;
 }
@@ -123,12 +124,14 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
     clienteId: cliente.id,
     vehiculoId: vehiculo.id,
     servicioId: servicio.id,
+    tipoServicioId: tipo.id,
     slotInicio,
     userId: usuario.id,
   };
 }
 
 export async function destroyTestFixture(empresaId: string) {
+  await prisma.sesion.deleteMany({ where: { empresaId } });
   await prisma.wahMessage.deleteMany({ where: { empresaId } });
   await prisma.wahConversation.deleteMany({ where: { empresaId } });
   await prisma.wahMedia.deleteMany({ where: { empresaId } });
@@ -137,6 +140,9 @@ export async function destroyTestFixture(empresaId: string) {
     where: { bahia: { taller: { empresaId } } },
   });
   await prisma.eventoTurno.deleteMany({ where: { turno: { empresaId } } });
+  await prisma.clienteClasificacionEvento.deleteMany({ where: { empresaId } });
+  await prisma.historialServicio.deleteMany({ where: { empresaId } });
+  await prisma.clientePerfilBuyer.deleteMany({ where: { empresaId } });
   await prisma.detalleTurno.deleteMany({ where: { turno: { empresaId } } });
   await prisma.movimiento.deleteMany({ where: { empresaId } });
   await prisma.turno.deleteMany({ where: { empresaId } });

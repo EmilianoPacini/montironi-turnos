@@ -1,6 +1,5 @@
 import prisma from "@/lib/db";
 import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
-import { calcularProximoServicioKm } from "@/lib/modules/catalog/intervalo.service";
 import {
   assertClienteRequiredFields,
   ClienteValidationError,
@@ -65,92 +64,6 @@ export async function getClienteByTelefono(telefono: string, empresaId: string) 
   });
 }
 
-/** Contexto completo para agentes IA — id, teléfono, vehículos, turnos, km, próximos servicios. */
-export async function getClienteContext(params: { empresaId: string; id?: string; telefono?: string }) {
-  let cliente;
-  if (params.id) {
-    cliente = await getCliente(params.id, params.empresaId);
-  } else if (params.telefono) {
-    const row = await getClienteByTelefono(params.telefono, params.empresaId);
-    if (row) cliente = await getCliente(row.id, params.empresaId);
-  }
-
-  if (!cliente) return null;
-
-  const vehiculos = await Promise.all(
-    cliente.vehiculos.map(async (cv) => {
-      const v = cv.vehiculo;
-      const ultimoTurno = await prisma.turno.findFirst({
-        where: { vehiculoId: v.id, empresaId: params.empresaId },
-        orderBy: { inicio: "desc" },
-        include: { detalles: { include: { servicio: true } } },
-      });
-
-      const proximosServicios = [];
-      if (v.kilometrajeActual != null && ultimoTurno) {
-        for (const d of ultimoTurno.detalles) {
-          const proximoKm = await calcularProximoServicioKm({
-            servicioId: d.servicioId,
-            tipoVehiculo: v.tipoVehiculo,
-            condicion: v.condicion,
-            kilometrajeActual: v.kilometrajeActual,
-          });
-          if (proximoKm != null) {
-            proximosServicios.push({
-              servicioId: d.servicioId,
-              servicioNombre: d.nombreSnapshot,
-              proximoKm,
-            });
-          }
-        }
-      }
-
-      return {
-        id: v.id,
-        patente: v.patente,
-        marca: v.marca,
-        modelo: v.modelo,
-        anio: v.anio,
-        tipoVehiculo: v.tipoVehiculo,
-        condicion: v.condicion,
-        kilometrajeActual: v.kilometrajeActual,
-        proximosServicios,
-      };
-    })
-  );
-
-  const turnos = await prisma.turno.findMany({
-    where: { clienteId: cliente.id, empresaId: params.empresaId },
-    orderBy: { inicio: "desc" },
-    take: 20,
-    include: {
-      vehiculo: true,
-      detalles: true,
-      bahia: true,
-    },
-  });
-
-  return {
-    id: cliente.id,
-    nombre: cliente.nombre,
-    apellido: cliente.apellido,
-    telefono: cliente.telefono,
-    email: cliente.email,
-    documento: cliente.documento,
-    vehiculos,
-    turnos: turnos.map((t) => ({
-      id: t.id,
-      estado: t.estado,
-      inicio: t.inicio,
-      finalizaEn: t.finalizaEn,
-      kilometraje: t.kilometraje,
-      patente: t.vehiculo.patente,
-      servicios: t.detalles.map((d) => d.nombreSnapshot),
-      bahia: t.bahia.nombre,
-    })),
-  };
-}
-
 export async function upsertCliente(params: {
   empresaId: string;
   id?: string;
@@ -164,8 +77,8 @@ export async function upsertCliente(params: {
   const { nombre, apellido, telefono } = assertClienteRequiredFields(params);
 
   if (params.id) {
-    return prisma.cliente.update({
-      where: { id: params.id },
+    const updated = await prisma.cliente.updateMany({
+      where: { id: params.id, empresaId: params.empresaId },
       data: {
         nombre,
         apellido,
@@ -174,6 +87,12 @@ export async function upsertCliente(params: {
         documento: params.documento?.trim() || null,
         notas: params.notas,
       },
+    });
+    if (updated.count === 0) {
+      throw new DomainError("Cliente no encontrado", "RecursoNoEncontrado");
+    }
+    return prisma.cliente.findFirstOrThrow({
+      where: { id: params.id, empresaId: params.empresaId },
     });
   }
 
@@ -290,3 +209,5 @@ export async function linkVehiculoToCliente(
     update: {},
   });
 }
+
+export { getClienteContext } from "@/lib/modules/customers/application/get-cliente-context";

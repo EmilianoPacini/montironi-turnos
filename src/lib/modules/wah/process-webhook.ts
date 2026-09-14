@@ -184,6 +184,8 @@ async function processInboundWebhookMessage(params: {
       contactName: params.contactName ?? conversation.contactName,
       body: parsed.body,
       messageType: parsed.messageType,
+      // Explicit for n8n: this path only runs when !botPaused
+      botPaused: false,
     });
   }
 
