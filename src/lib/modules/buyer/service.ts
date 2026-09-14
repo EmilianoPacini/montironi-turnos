@@ -1,5 +1,13 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { DomainError } from "@/lib/modules/appointments/errors";
+
+function toInputJson(
+  value: Record<string, unknown> | undefined,
+): Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  return value as Prisma.InputJsonValue;
+}
 
 export type ClasificacionFuente = "bot" | "humano" | "sistema" | "integracion";
 
@@ -83,13 +91,29 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         intencion: input.intencion,
         tagsDelta,
         scoreReclamosDelta: scoreDelta,
-        payload: input.payload ?? undefined,
+        payload: toInputJson(input.payload),
         actorUsuarioId: input.actorUsuarioId,
       },
     });
 
     const mergedTags = mergeTags(existing?.tags ?? [], tagsDelta);
     const scoreReclamos = Math.max(0, (existing?.scoreReclamos ?? 0) + scoreDelta);
+
+    const updateData: Prisma.ClientePerfilBuyerUncheckedUpdateInput = {
+      tags: mergedTags,
+      scoreReclamos,
+      ultimaClasificacion: input.clasificacion,
+      ultimaClasificacionEn: now,
+    };
+    if (input.intencion !== undefined) {
+      updateData.intencionPredominante = input.intencion;
+    }
+    if (input.wahConversationId !== undefined) {
+      updateData.wahConversationId = input.wahConversationId;
+    }
+    if (input.payload !== undefined) {
+      updateData.metadata = toInputJson(input.payload);
+    }
 
     const perfil = await tx.clientePerfilBuyer.upsert({
       where: { clienteId: input.clienteId },
@@ -102,19 +126,9 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         ultimaClasificacion: input.clasificacion,
         ultimaClasificacionEn: now,
         wahConversationId: input.wahConversationId,
-        metadata: input.payload ?? undefined,
+        metadata: toInputJson(input.payload),
       },
-      update: {
-        tags: mergedTags,
-        ...(input.intencion !== undefined ? { intencionPredominante: input.intencion } : {}),
-        scoreReclamos,
-        ultimaClasificacion: input.clasificacion,
-        ultimaClasificacionEn: now,
-        ...(input.wahConversationId !== undefined
-          ? { wahConversationId: input.wahConversationId }
-          : {}),
-        ...(input.payload !== undefined ? { metadata: input.payload } : {}),
-      },
+      update: updateData,
     });
 
     await tx.clienteClasificacionEvento.update({
