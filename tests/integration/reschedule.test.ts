@@ -86,6 +86,7 @@ describe("QA-4 · Reprogramación atómica", () => {
       rescheduleTurno({
         turnoId: turno.id,
         empresaId: fx.empresaId,
+        bahiaId: fx.bahia2Id,
         inicio: conflictStart,
         version: turno.version,
       })

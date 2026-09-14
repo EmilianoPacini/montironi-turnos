@@ -36,7 +36,16 @@ export const sendWahPanelMessageSchema = z.object({
   generatedByAi: z.boolean().optional(),
 });
 
+export const upsertWahAccountSchema = z.object({
+  phoneNumberId: z.string().min(5),
+  wabaId: z.string().optional(),
+  label: z.string().optional(),
+  displayPhoneNumber: z.string().optional(),
+  active: z.boolean().optional(),
+});
+
 export type SendWahTextIntegrationInput = z.infer<typeof sendWahTextIntegrationSchema>;
 export type SendWahAudioIntegrationInput = z.infer<typeof sendWahAudioIntegrationSchema>;
 export type SendWahFileIntegrationInput = z.infer<typeof sendWahFileIntegrationSchema>;
 export type SendWahPanelMessageInput = z.infer<typeof sendWahPanelMessageSchema>;
+export type UpsertWahAccountInput = z.infer<typeof upsertWahAccountSchema>;

@@ -13,7 +13,7 @@ import {
   removeBlock,
   assertNotPastInicio,
 } from "@/lib/modules/appointments/service";
-import { isDomainError } from "@/lib/modules/appointments/errors";
+import { isDomainError, DomainError } from "@/lib/modules/appointments/errors";
 import { upsertCliente, upsertVehiculo } from "@/lib/modules/customers/service";
 import { ClienteValidationError } from "@/lib/modules/customers/validation";
 import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog/service";
@@ -169,6 +169,15 @@ function redirectWithError(path: string, message: string): never {
 }
 
 function handleFormError(e: unknown, returnPath: string): never {
+  if (
+    e &&
+    typeof e === "object" &&
+    "digest" in e &&
+    typeof (e as { digest?: unknown }).digest === "string" &&
+    String((e as { digest: string }).digest).startsWith("NEXT_")
+  ) {
+    throw e;
+  }
   if (isDomainError(e)) {
     redirectWithError(returnPath, e.message);
   }
@@ -628,10 +637,10 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
       empresaId: session.empresaId,
       margenMinutos: Number(formData.get("margenMinutos")),
     });
-    revalidateDomainSurfaces(["/configuracion"], "catalogo");
-    redirect("/configuracion");
+    revalidateDomainSurfaces(["/taller"], "catalogo");
+    redirect("/taller");
   } catch (e) {
-    handleFormError(e, "/configuracion");
+    handleFormError(e, "/taller");
   }
 }
 
@@ -684,16 +693,30 @@ export async function saveIntervaloAction(formData: FormData): Promise<void> {
 }
 
 export async function saveBahiaAction(formData: FormData): Promise<void> {
+  const tallerId = String(formData.get("tallerId") ?? "");
+  const returnPath = tallerId
+    ? `/bahias?tallerId=${encodeURIComponent(tallerId)}`
+    : "/bahias";
   try {
     const session = await requireSession();
-    assertAdminRole(session.rol);
-    const tallerId = String(formData.get("tallerId"));
+    try {
+      assertAdminRole(session.rol);
+    } catch {
+      redirect("/agenda");
+    }
+    if (!tallerId) {
+      throw new DomainError("Elegí un taller antes de crear la bahía", "ValidacionCliente");
+    }
     const bahiaId = String(formData.get("bahiaId") ?? "");
+    const nombre = String(formData.get("nombre") ?? "").trim();
+    if (!nombre) {
+      throw new DomainError("El nombre de la bahía es obligatorio", "ValidacionCliente");
+    }
     if (bahiaId) {
       await updateBahia({
         bahiaId,
         empresaId: session.empresaId,
-        nombre: String(formData.get("nombre")),
+        nombre,
         activa: formData.get("activa") === "true",
         usuarioId: session.userId,
       });
@@ -701,13 +724,13 @@ export async function saveBahiaAction(formData: FormData): Promise<void> {
       await createBahia({
         tallerId,
         empresaId: session.empresaId,
-        nombre: String(formData.get("nombre")),
+        nombre,
         usuarioId: session.userId,
       });
     }
-    revalidateDomainSurfaces([], "catalogo");
-    redirect("/bahias");
+    revalidateDomainSurfaces(["/taller", "/bahias"], "catalogo");
+    redirect(returnPath);
   } catch (e) {
-    handleFormError(e, "/bahias");
+    handleFormError(e, returnPath);
   }
 }

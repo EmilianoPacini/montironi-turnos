@@ -19,7 +19,7 @@ export async function sendWhatsAppText(params: SendTextParams): Promise<{ wamid:
   const { metaAccessToken } = getWahConfig();
   const to = params.to.replace(/\D/g, "");
 
-  if (!metaAccessToken) {
+  if (!metaAccessToken || process.env.VITEST) {
     return { wamid: `local_${randomUUID()}` };
   }
 
@@ -53,7 +53,7 @@ export async function sendWhatsAppMedia(params: SendMediaParams): Promise<{ wami
   const { metaAccessToken } = getWahConfig();
   const to = params.to.replace(/\D/g, "");
 
-  if (!metaAccessToken) {
+  if (!metaAccessToken || process.env.VITEST) {
     return { wamid: `local_${randomUUID()}` };
   }
 
@@ -98,7 +98,7 @@ export async function downloadWhatsAppMedia(
 ): Promise<{ buffer: Buffer; mimeType: string }> {
   const { metaAccessToken } = getWahConfig();
 
-  if (!metaAccessToken) {
+  if (!metaAccessToken || process.env.VITEST) {
     return {
       buffer: Buffer.from(`mock-media:${mediaId}`),
       mimeType: "application/octet-stream",

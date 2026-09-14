@@ -77,4 +77,30 @@ describe("Catálogo · oferta en taller y bahía", () => {
     });
     expect(links).toBe(servicios);
   });
+
+  it("una bahía nueva queda en el taller elegido, no en otro", async () => {
+    const { createTaller } = await import("@/lib/modules/catalog/taller.service");
+    const { listBahiasTaller } = await import("@/lib/modules/catalog/bahia.service");
+    const taller = await createTaller({
+      empresaId: fixture.empresaId,
+      nombre: "Sucursal exclusiva",
+      bahias: [{ nombre: "Box propio" }],
+    });
+    expect(taller.id).not.toBe(fixture.tallerId);
+
+    const propias = await listBahiasTaller(taller.id, fixture.empresaId);
+    expect(propias).toHaveLength(1);
+    expect(propias[0]?.nombre).toBe("Box propio");
+    expect(propias[0]?.tallerId).toBe(taller.id);
+
+    const extra = await createBahia({
+      tallerId: taller.id,
+      empresaId: fixture.empresaId,
+      nombre: "Box 2",
+    });
+    expect(extra.tallerId).toBe(taller.id);
+
+    const delOtro = await listBahiasTaller(fixture.tallerId, fixture.empresaId);
+    expect(delOtro.some((b) => b.id === extra.id || b.nombre === "Box propio")).toBe(false);
+  });
 });

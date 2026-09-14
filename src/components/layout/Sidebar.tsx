@@ -109,7 +109,7 @@ const adminLinks: NavLink[] = [
   { href: "/servicios", label: "Servicios", icon: <IconServicios /> },
   { href: "/bahias", label: "Bahías", icon: <IconBahias /> },
   { href: "/movimientos", label: "Movimientos", icon: <IconMovimientos /> },
-  { href: "/configuracion", label: "Configuración", icon: <IconConfig /> },
+  { href: "/taller", label: "Taller", icon: <IconConfig /> },
   { href: "/usuarios", label: "Usuarios", icon: <IconUsuarios /> },
 ];
 

@@ -10,7 +10,6 @@ export async function handleCrearTurno(empresaId: string, body: Record<string, u
   const turno = await createTurno({
     empresaId,
     tallerId: String(body.tallerId),
-    bahiaId: body.bahiaId ? String(body.bahiaId) : undefined,
     clienteId: String(body.clienteId),
     vehiculoId: String(body.vehiculoId),
     servicioIds: body.servicioIds as string[],

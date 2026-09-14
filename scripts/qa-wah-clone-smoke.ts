@@ -51,9 +51,10 @@ async function main() {
 
   const accounts = await prisma.whatsappAccount.findMany({ where: { empresaId: u.empresaId } });
   rec(
-    "db-account-placeholder",
-    accounts.length >= 1 && accounts[0].phoneNumberId === "PLACEHOLDER_PHONE_NUMBER_ID" && accounts[0].empresaId === u.empresaId,
-    JSON.stringify(accounts.map((a) => ({ phone: a.phoneNumberId, label: a.label, empresaId: a.empresaId }))),
+    "db-account-mendoza",
+    accounts.length >= 1 &&
+      accounts.some((a) => a.phoneNumberId === "1285123408020696" && a.empresaId === u.empresaId),
+    JSON.stringify(accounts.map((a) => ({ phone: a.phoneNumberId, label: a.label, waba: a.wabaId, empresaId: a.empresaId }))),
     "datos"
   );
 

@@ -1,10 +1,14 @@
 import { Prisma, EstadoTurno, CanalTurno } from "@prisma/client";
 import prisma from "@/lib/db";
-import { assertWithinSchedule, calcularDuracionTotal } from "@/lib/modules/availability/service";
+import {
+  assertAnticipacion,
+  assertWithinSchedule,
+  calcularDuracionTotal,
+} from "@/lib/modules/availability/service";
 import { DomainError } from "@/lib/modules/appointments/errors";
 import { registrarMovimiento } from "@/lib/modules/audit/movimiento.service";
 import { insertOcupacionTurno } from "@/lib/modules/appointments/application/internal/occupation";
-import { resolveBahiaAssignment } from "@/lib/modules/appointments/application/resolve-bahia";
+import { assignBahiaInTransaction } from "@/lib/modules/appointments/application/resolve-bahia";
 import type { CreateTurnoInput } from "@/lib/modules/appointments/application/types";
 
 async function assertCreateTurnoTenantScope(input: CreateTurnoInput) {
@@ -54,19 +58,20 @@ export async function createTurno(input: CreateTurnoInput) {
   const finalizaEn = new Date(input.inicio.getTime() + duracionMin * 60_000);
 
   await assertWithinSchedule(input.tallerId, input.inicio, finalizaEn);
-
-  const { bahiaId } = await resolveBahiaAssignment({
-    tallerId: input.tallerId,
-    servicioIds: input.servicioIds,
-    inicio: input.inicio,
-    fin: finalizaEn,
-    bahiaId: input.bahiaId,
-  });
+  await assertAnticipacion(input.tallerId, input.inicio);
 
   const estado = input.confirmar ? EstadoTurno.confirmado : EstadoTurno.pendiente;
 
   try {
     return await prisma.$transaction(async (tx) => {
+      const { bahiaId } = await assignBahiaInTransaction(tx, {
+        tallerId: input.tallerId,
+        servicioIds: input.servicioIds,
+        inicio: input.inicio,
+        fin: finalizaEn,
+        bahiaId: input.bahiaId,
+      });
+
       const turno = await tx.turno.create({
         data: {
           empresaId: input.empresaId,

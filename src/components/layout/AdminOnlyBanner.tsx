@@ -1,4 +1,15 @@
-export function AdminOnlyBanner() {
+export function AdminOnlyBanner({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <p
+        role="status"
+        className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-900"
+      >
+        Solo administradores
+      </p>
+    );
+  }
+
   return (
     <div
       role="status"

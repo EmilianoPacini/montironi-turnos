@@ -6,10 +6,10 @@ export function revalidateDomainSurfaces(
   scope: "catalogo" | "agenda" | "clientes" | "all" = "all"
 ) {
   const byScope: Record<typeof scope, string[]> = {
-    catalogo: ["/servicios", "/turnos/nuevo", "/agenda", "/bahias"],
+    catalogo: ["/servicios", "/turnos/nuevo", "/agenda", "/bahias", "/taller"],
     agenda: ["/agenda", "/turnos/nuevo"],
     clientes: ["/clientes", "/turnos/nuevo", "/agenda"],
-    all: ["/servicios", "/turnos/nuevo", "/agenda", "/bahias", "/clientes"],
+    all: ["/servicios", "/turnos/nuevo", "/agenda", "/bahias", "/clientes", "/taller"],
   };
 
   const paths = new Set([...byScope[scope], ...extra]);

@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import dotenv from "dotenv";
 
 dotenv.config();
+process.env.AGENT_API_EMPRESA = "*";
 
 export const cookieStore = new Map<string, string>();
 

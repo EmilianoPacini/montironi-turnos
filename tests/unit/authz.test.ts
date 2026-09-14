@@ -11,6 +11,7 @@ describe("QA-7 · Authz admin vs empleado", () => {
   it("identifica rutas solo admin", () => {
     expect(isAdminOnlyPath("/servicios")).toBe(true);
     expect(isAdminOnlyPath("/configuracion")).toBe(true);
+    expect(isAdminOnlyPath("/taller")).toBe(true);
     expect(isAdminOnlyPath("/usuarios")).toBe(true);
     expect(isAdminOnlyPath("/agenda")).toBe(false);
     expect(isAdminOnlyPath("/clientes")).toBe(false);

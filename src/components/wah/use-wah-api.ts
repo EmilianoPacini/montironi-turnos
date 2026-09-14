@@ -13,6 +13,7 @@ export type WahAccount = {
   label: string;
   phoneNumberId: string;
   displayPhoneNumber: string | null;
+  wabaId: string | null;
   active: boolean;
 };
 

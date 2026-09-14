@@ -4,7 +4,6 @@ export async function handleReprogramarTurno(empresaId: string, body: Record<str
   const turno = await rescheduleTurno({
     turnoId: String(body.turnoId),
     empresaId,
-    bahiaId: body.bahiaId ? String(body.bahiaId) : undefined,
     inicio: new Date(String(body.inicio)),
     version: Number(body.version),
   });

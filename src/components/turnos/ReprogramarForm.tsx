@@ -7,6 +7,7 @@ import {
   type ReprogramarFormValues,
 } from "@/lib/modules/appointments/actions";
 import { FormError } from "@/components/ui/FormError";
+import { DateTimeClockField } from "@/components/ui/DateTimeClockField";
 import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
 
 type BahiaOption = { id: string; nombre: string };
@@ -72,14 +73,13 @@ export function ReprogramarForm({
 
       <label className="block text-sm">
         <span className="mb-1 block font-medium">Nuevo inicio</span>
-        <input
-          type="datetime-local"
+        <DateTimeClockField
           name="inicio"
           required
           data-field="inicio"
           value={fields.inicio}
-          onChange={(e) => setFields((prev) => ({ ...prev, inicio: e.target.value }))}
-          className={fieldClass("inicio", "w-full rounded-lg border px-3 py-2")}
+          onChange={(inicio) => setFields((prev) => ({ ...prev, inicio }))}
+          className={fieldClass("inicio", "rounded-lg")}
         />
         <FieldErrorMessage field="inicio" />
       </label>

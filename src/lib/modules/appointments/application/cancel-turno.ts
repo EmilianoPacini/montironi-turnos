@@ -5,6 +5,7 @@ import { DomainError } from "@/lib/modules/appointments/errors";
 import { registrarMovimiento } from "@/lib/modules/audit/movimiento.service";
 import { liberateOcupacionTurno } from "@/lib/modules/appointments/application/internal/occupation";
 import { transitionTurno } from "@/lib/modules/appointments/application/internal/transition-turno";
+import { getAgendaConfig } from "@/lib/modules/availability/service";
 
 export async function cancelTurno(params: {
   turnoId: string;
@@ -23,6 +24,21 @@ export async function cancelTurno(params: {
   }
   if (!canTransition(turno.estado, EstadoTurno.cancelado)) {
     throw new DomainError("No se puede cancelar", "TransicionInvalida");
+  }
+
+  const config = await getAgendaConfig(turno.tallerId);
+  if (!config.permiteCancelacion) {
+    throw new DomainError("Este taller no permite cancelar turnos", "TransicionInvalida");
+  }
+  const now = new Date();
+  if (turno.inicio > now) {
+    const hoursLeft = (turno.inicio.getTime() - now.getTime()) / 3_600_000;
+    if (hoursLeft < config.horasLimiteCancelacion) {
+      throw new DomainError(
+        `Solo se puede cancelar hasta ${config.horasLimiteCancelacion} h antes`,
+        "TransicionInvalida"
+      );
+    }
   }
 
   return prisma.$transaction(async (tx) => {

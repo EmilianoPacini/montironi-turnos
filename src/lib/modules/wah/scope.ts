@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { RolUsuario } from "@prisma/client";
 import { assertPanelAccess } from "@/lib/auth/access";
 import { requireSession } from "@/lib/auth/session";
 import {
@@ -10,6 +11,16 @@ export async function requireWahSession() {
   const session = await requireSession();
   try {
     assertPanelAccess({ rol: session.rol });
+  } catch {
+    throw new WahAuthError("FORBIDDEN", 403);
+  }
+  return session;
+}
+
+export async function requireWahAdmin() {
+  const session = await requireWahSession();
+  try {
+    assertPanelAccess({ rol: session.rol, roles: [RolUsuario.admin] });
   } catch {
     throw new WahAuthError("FORBIDDEN", 403);
   }

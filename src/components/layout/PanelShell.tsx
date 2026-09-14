@@ -18,7 +18,7 @@ export function PanelShell({
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar rol={rol} nombre={nombre} currentPath={pathname} />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-h-screen flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

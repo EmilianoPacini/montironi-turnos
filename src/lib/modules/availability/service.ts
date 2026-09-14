@@ -8,9 +8,21 @@ import {
   isAfter,
 } from "date-fns";
 import { es } from "date-fns/locale";
+import { DiaSemana, EstadoCambioHorario, TipoExcepcion } from "@prisma/client";
 import prisma from "@/lib/db";
-import { DiaSemana, TipoExcepcion } from "@prisma/client";
 import { DomainError } from "@/lib/modules/appointments/errors";
+import {
+  SYSTEM_HORIZON_DAYS,
+  dateOnlyUtc,
+  ymdFromDateOnly,
+} from "@/lib/time/business-tz";
+import {
+  type DiaHorarioSnapshot,
+  type FranjaJson,
+  canonicalWeeklySnapshot,
+  franjasFromLegacy,
+  normalizeFranjas,
+} from "@/lib/modules/catalog/franjas";
 
 const DIA_MAP: Record<number, DiaSemana> = {
   0: DiaSemana.domingo,
@@ -42,15 +54,39 @@ export async function getMargenMin(tallerId: string): Promise<number> {
   return config?.margenMinutos ?? 15;
 }
 
+export async function getAgendaConfig(tallerId: string) {
+  const config = await prisma.configuracionTurnos.findUnique({
+    where: { tallerId },
+  });
+  return {
+    margenMinutos: config?.margenMinutos ?? 15,
+    intervaloInicioMinutos: config?.intervaloInicioMinutos ?? 15,
+    anticipacionMinimaHoras: config?.anticipacionMinimaHoras ?? 0,
+    anticipacionMaximaDias: config?.anticipacionMaximaDias ?? SYSTEM_HORIZON_DAYS,
+    permiteCancelacion: config?.permiteCancelacion ?? true,
+    horasLimiteCancelacion: config?.horasLimiteCancelacion ?? 24,
+  };
+}
+
 export async function calcularDuracionTotal(params: {
   empresaId: string;
   tallerId: string;
   servicioIds: string[];
-}): Promise<{ duracionMin: number; servicios: Awaited<ReturnType<typeof loadServicios>> }> {
+}): Promise<{
+  duracionMin: number;
+  duracionServiciosMin: number;
+  margenMinutos: number;
+  servicios: Awaited<ReturnType<typeof loadServicios>>;
+}> {
   const servicios = await loadServicios(params.empresaId, params.servicioIds);
-  const sum = servicios.reduce((acc, s) => acc + s.duracionMin, 0);
-  const margen = await getMargenMin(params.tallerId);
-  return { duracionMin: sum + margen, servicios };
+  const duracionServiciosMin = servicios.reduce((acc, s) => acc + s.duracionMin, 0);
+  const margenMinutos = await getMargenMin(params.tallerId);
+  return {
+    duracionMin: duracionServiciosMin + margenMinutos,
+    duracionServiciosMin,
+    margenMinutos,
+    servicios,
+  };
 }
 
 async function loadServicios(empresaId: string, servicioIds: string[]) {
@@ -70,37 +106,76 @@ export interface BahiaAvailability {
   slots: TimeSlot[];
 }
 
-export async function getCompatibleBahias(tallerId: string, servicioIds: string[]) {
-  const bahias = await prisma.bahia.findMany({
-    where: { tallerId, activa: true },
-    orderBy: { orden: "asc" },
+export interface VentanaDisponible {
+  inicio: string;
+  fin: string;
+}
+
+export function franjasToSlots(date: Date, franjas: FranjaJson[]): TimeSlot[] {
+  return franjas.map((f) => ({
+    inicio: parseTimeOnDate(date, f.horaInicio),
+    fin: parseTimeOnDate(date, f.horaFin),
+  }));
+}
+
+export function slotFitsSchedule(schedule: TimeSlot[], inicio: Date, fin: Date): boolean {
+  return schedule.some((w) => !isBefore(inicio, w.inicio) && !isAfter(fin, w.fin));
+}
+
+export async function loadPatronesAsSnapshot(tallerId: string): Promise<DiaHorarioSnapshot[]> {
+  const patrones = await prisma.patronHorario.findMany({
+    where: { tallerId },
+    include: { franjas: true },
   });
+  return canonicalWeeklySnapshot(
+    patrones.map((p) => ({
+      dia: p.dia,
+      activo: p.activo,
+      franjas: p.franjas.map((f) => ({ horaInicio: f.horaInicio, horaFin: f.horaFin })),
+    }))
+  );
+}
 
-  if (servicioIds.length === 0) return bahias;
+export async function getConfirmedSnapshotForDate(
+  tallerId: string,
+  date: Date
+): Promise<DiaHorarioSnapshot[] | null> {
+  const fecha = dateOnlyUtc(date);
+  const cambio = await prisma.cambioHorario.findFirst({
+    where: {
+      tallerId,
+      estado: EstadoCambioHorario.confirmado,
+      aplicaDesde: { lte: fecha },
+    },
+    orderBy: { aplicaDesde: "desc" },
+  });
+  if (!cambio) return null;
+  return canonicalWeeklySnapshot(cambio.franjas as DiaHorarioSnapshot[]);
+}
 
-  const compatible = [];
-  for (const bahia of bahias) {
-    const allowed = await prisma.bahiaServicio.count({
-      where: {
-        bahiaId: bahia.id,
-        servicioId: { in: servicioIds },
-        activo: true,
-      },
-    });
-    if (allowed >= servicioIds.length) compatible.push(bahia);
+function franjasFromExcepcion(excepcion: {
+  tipo: TipoExcepcion;
+  franjas: unknown;
+  horaInicio: string | null;
+  horaFin: string | null;
+}): FranjaJson[] {
+  if (excepcion.tipo === TipoExcepcion.cerrado) return [];
+  if (excepcion.franjas != null) {
+    return normalizeFranjas(excepcion.franjas);
   }
-  return compatible;
+  return franjasFromLegacy(excepcion.horaInicio, excepcion.horaFin);
 }
 
 export async function getTallerScheduleForDate(
   tallerId: string,
-  date: Date
+  date: Date,
+  proposedSnapshot?: DiaHorarioSnapshot[] | null
 ): Promise<TimeSlot[]> {
   const excepcion = await prisma.excepcionHorario.findUnique({
     where: {
       tallerId_fecha: {
         tallerId,
-        fecha: startOfDay(date),
+        fecha: dateOnlyUtc(date),
       },
     },
   });
@@ -109,13 +184,23 @@ export async function getTallerScheduleForDate(
     return [];
   }
 
-  if (excepcion?.tipo === TipoExcepcion.horario_especial && excepcion.horaInicio && excepcion.horaFin) {
-    return [
-      {
-        inicio: parseTimeOnDate(date, excepcion.horaInicio),
-        fin: parseTimeOnDate(date, excepcion.horaFin),
-      },
-    ];
+  if (excepcion?.tipo === TipoExcepcion.horario_especial) {
+    return franjasToSlots(date, franjasFromExcepcion(excepcion));
+  }
+
+  if (proposedSnapshot) {
+    const dia = DIA_MAP[date.getDay()];
+    const day = proposedSnapshot.find((d) => d.dia === dia);
+    if (!day?.activo) return [];
+    return franjasToSlots(date, day.franjas);
+  }
+
+  const snapshot = await getConfirmedSnapshotForDate(tallerId, date);
+  if (snapshot) {
+    const dia = DIA_MAP[date.getDay()];
+    const day = snapshot.find((d) => d.dia === dia);
+    if (!day?.activo) return [];
+    return franjasToSlots(date, day.franjas);
   }
 
   const dia = DIA_MAP[date.getDay()];
@@ -131,6 +216,9 @@ export async function getTallerScheduleForDate(
     fin: parseTimeOnDate(date, f.horaFin),
   }));
 }
+
+/** Alias público del resolver de horario. */
+export const resolverHorario = getTallerScheduleForDate;
 
 export async function getOcupacionesForBahia(
   bahiaId: string,
@@ -209,11 +297,26 @@ export async function assertWithinSchedule(
     throw new DomainError("Taller cerrado en esa fecha", "FueraDeHorario");
   }
 
-  const fits = schedule.some(
-    (w) => !isBefore(inicio, w.inicio) && !isAfter(fin, w.fin)
-  );
-  if (!fits) {
+  if (!slotFitsSchedule(schedule, inicio, fin)) {
     throw new DomainError("Horario fuera del calendario del taller", "FueraDeHorario");
+  }
+}
+
+export async function assertAnticipacion(
+  tallerId: string,
+  inicio: Date,
+  now: Date = new Date()
+): Promise<void> {
+  const config = await getAgendaConfig(tallerId);
+  if (config.anticipacionMinimaHoras > 0) {
+    const earliest = addMinutes(now, config.anticipacionMinimaHoras * 60);
+    if (inicio < earliest) {
+      throw new DomainError("El turno es demasiado pronto", "FueraDeHorario");
+    }
+  }
+  const latest = addMinutes(now, config.anticipacionMaximaDias * 24 * 60);
+  if (inicio > latest) {
+    throw new DomainError("El turno supera la anticipación máxima", "FueraDeHorario");
   }
 }
 
@@ -237,18 +340,60 @@ export async function checkSlotAvailable(
   return !conflict;
 }
 
+export async function getCompatibleBahias(tallerId: string, servicioIds: string[]) {
+  const bahias = await prisma.bahia.findMany({
+    where: { tallerId, activa: true },
+    orderBy: { orden: "asc" },
+  });
+
+  if (servicioIds.length === 0) return bahias;
+
+  const compatible = [];
+  for (const bahia of bahias) {
+    const allowed = await prisma.bahiaServicio.count({
+      where: {
+        bahiaId: bahia.id,
+        servicioId: { in: servicioIds },
+        activo: true,
+      },
+    });
+    if (allowed >= servicioIds.length) compatible.push(bahia);
+  }
+  return compatible;
+}
+
+export function aggregateVentanas(availability: BahiaAvailability[]): VentanaDisponible[] {
+  const byStart = new Map<number, TimeSlot>();
+  for (const bahia of availability) {
+    for (const slot of bahia.slots) {
+      if (!byStart.has(slot.inicio.getTime())) {
+        byStart.set(slot.inicio.getTime(), slot);
+      }
+    }
+  }
+  return [...byStart.values()]
+    .sort((a, b) => a.inicio.getTime() - b.inicio.getTime())
+    .map((s) => ({
+      inicio: format(s.inicio, "HH:mm"),
+      fin: format(s.fin, "HH:mm"),
+    }));
+}
+
 export async function getAvailabilityForDate(params: {
   empresaId: string;
   tallerId: string;
   date: Date;
   servicioIds: string[];
   bahiaId?: string;
+  now?: Date;
 }): Promise<BahiaAvailability[]> {
+  const now = params.now ?? new Date();
   const { duracionMin } = await calcularDuracionTotal({
     empresaId: params.empresaId,
     tallerId: params.tallerId,
     servicioIds: params.servicioIds,
   });
+  const config = await getAgendaConfig(params.tallerId);
 
   const schedule = await getTallerScheduleForDate(params.tallerId, params.date);
   if (schedule.length === 0) return [];
@@ -258,12 +403,19 @@ export async function getAvailabilityForDate(params: {
     ? compatibleBahias.filter((b) => b.id === params.bahiaId)
     : compatibleBahias;
 
+  const earliest = addMinutes(now, config.anticipacionMinimaHoras * 60);
+  const latest = addMinutes(now, config.anticipacionMaximaDias * 24 * 60);
+
   const results: BahiaAvailability[] = [];
 
   for (const bahia of bahias) {
     const occupied = await getOcupacionesForBahia(bahia.id, params.date);
     const freeWindows = subtractOccupiedFromWindows(schedule, occupied);
-    const slots = slotsFromFreeWindows(freeWindows, duracionMin);
+    const slots = slotsFromFreeWindows(
+      freeWindows,
+      duracionMin,
+      config.intervaloInicioMinutos
+    ).filter((s) => s.inicio >= earliest && s.inicio <= latest);
 
     results.push({
       bahiaId: bahia.id,
@@ -273,6 +425,108 @@ export async function getAvailabilityForDate(params: {
   }
 
   return results;
+}
+
+/** Alias público del cálculo de disponibilidad. */
+export const calcularDisponibilidad = getAvailabilityForDate;
+
+export type ProximoSlot = {
+  inicio: string;
+  finServicio: string;
+  ocupadaHasta: string;
+  tallerId: string;
+  tallerNombre: string;
+  localidad: string | null;
+};
+
+export async function proximosSlots(params: {
+  empresaId: string;
+  servicioId: string;
+  tallerId?: string;
+  desde?: Date;
+  limite?: number;
+  now?: Date;
+}): Promise<ProximoSlot[]> {
+  const now = params.now ?? new Date();
+  const desde = params.desde ?? now;
+  const limite = Math.min(20, Math.max(1, params.limite ?? 5));
+
+  const talleres = await prisma.taller.findMany({
+    where: {
+      empresaId: params.empresaId,
+      activo: true,
+      configuracion: { is: {} },
+      ...(params.tallerId ? { id: params.tallerId } : {}),
+      bahias: { some: { activa: true } },
+    },
+    include: { configuracion: true },
+    orderBy: [{ nombre: "asc" }, { id: "asc" }],
+  });
+
+  const collected: Array<ProximoSlot & { sortInicio: number; tallerNombre: string }> = [];
+
+  for (const taller of talleres) {
+    const compatible = await getCompatibleBahias(taller.id, [params.servicioId]);
+    if (compatible.length === 0) continue;
+
+    const config = await getAgendaConfig(taller.id);
+    const horizonDays = Math.min(config.anticipacionMaximaDias, SYSTEM_HORIZON_DAYS);
+    const { duracionServiciosMin, duracionMin } = await calcularDuracionTotal({
+      empresaId: params.empresaId,
+      tallerId: taller.id,
+      servicioIds: [params.servicioId],
+    });
+
+    for (let dayOffset = 0; dayOffset <= horizonDays; dayOffset += 1) {
+      const date = addMinutes(startOfDay(desde), dayOffset * 24 * 60);
+      const availability = await getAvailabilityForDate({
+        empresaId: params.empresaId,
+        tallerId: taller.id,
+        date,
+        servicioIds: [params.servicioId],
+        now,
+      });
+      const seen = new Set<number>();
+      for (const bahia of availability) {
+        for (const slot of bahia.slots) {
+          const key = slot.inicio.getTime();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          collected.push({
+            inicio: slot.inicio.toISOString(),
+            finServicio: addMinutes(slot.inicio, duracionServiciosMin).toISOString(),
+            ocupadaHasta: addMinutes(slot.inicio, duracionMin).toISOString(),
+            tallerId: taller.id,
+            tallerNombre: taller.nombre,
+            localidad: taller.localidad,
+            sortInicio: key,
+          });
+        }
+      }
+      if (collected.length >= limite * 4) break;
+    }
+  }
+
+  collected.sort((a, b) => {
+    if (a.sortInicio !== b.sortInicio) return a.sortInicio - b.sortInicio;
+    const name = a.tallerNombre.localeCompare(b.tallerNombre, "es");
+    if (name !== 0) return name;
+    return a.tallerId.localeCompare(b.tallerId);
+  });
+
+  return collected.slice(0, limite).map(({ sortInicio: _s, ...rest }) => rest);
+}
+
+export async function horarioResumenForTaller(tallerId: string) {
+  const snapshot =
+    (await getConfirmedSnapshotForDate(tallerId, new Date())) ??
+    (await loadPatronesAsSnapshot(tallerId));
+  return snapshot
+    .filter((d) => d.activo && d.franjas.length > 0)
+    .map((d) => ({
+      dia: d.dia,
+      franjas: d.franjas.map((f) => ({ abre: f.horaInicio, cierra: f.horaFin })),
+    }));
 }
 
 export async function getAgendaForDate(params: {
@@ -318,3 +572,5 @@ export async function getAgendaForDate(params: {
 
   return { bahias, turnos, bloqueos, schedule, isClosed: schedule.length === 0 };
 }
+
+export { ymdFromDateOnly };

@@ -75,6 +75,14 @@ enum TipoExcepcion {
   @@map("tipo_excepcion")
 }
 
+enum EstadoCambioHorario {
+  borrador
+  confirmado
+  cancelado
+
+  @@map("estado_cambio_horario")
+}
+
 enum ModoPrecio {
   fijo
   desde
@@ -148,6 +156,7 @@ model Usuario {
   whatsappAccountsOwned WhatsappAccount[] @relation("WahAccountOwner")
   sesiones              Sesion[]
   clasificacionesActor  ClienteClasificacionEvento[]
+  cambiosHorarioConfirmados CambioHorario[]
 
   @@unique([empresaId, email])
   @@map("usuario")
@@ -173,22 +182,28 @@ model Sesion {
 }
 
 model Taller {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  empresaId String   @map("empresa_id") @db.Uuid
-  nombre    String
-  direccion String?
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId    String   @map("empresa_id") @db.Uuid
+  nombre       String
+  direccion    String?
+  calle        String?
+  numero       String?
+  localidad    String?
+  provincia    String?
+  codigoPostal String?  @map("codigo_postal")
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  empresa         Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  bahias          Bahia[]
-  tallerServicios TallerServicio[]
-  patronesHorario PatronHorario[]
-  excepciones     ExcepcionHorario[]
-  turnos          Turno[]
-  configuracion   ConfiguracionTurnos?
+  empresa            Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  bahias             Bahia[]
+  tallerServicios    TallerServicio[]
+  patronesHorario    PatronHorario[]
+  excepciones        ExcepcionHorario[]
+  turnos             Turno[]
+  configuracion      ConfiguracionTurnos?
   historialServicios HistorialServicio[]
+  cambiosHorario     CambioHorario[]
 
   @@map("taller")
 }
@@ -204,8 +219,9 @@ model Bahia {
 
   taller         Taller           @relation(fields: [tallerId], references: [id], onDelete: Cascade)
   bahiaServicios BahiaServicio[]
-  ocupaciones    OcupacionBahia[]
-  turnos         Turno[]
+  ocupaciones        OcupacionBahia[]
+  turnos             Turno[]
+  historialServicios HistorialServicio[]
 
   @@map("bahia")
 }
@@ -306,6 +322,7 @@ model ExcepcionHorario {
   tipo       TipoExcepcion
   horaInicio String?       @map("hora_inicio")
   horaFin    String?       @map("hora_fin")
+  franjas    Json?
   motivo     String?
 
   taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
@@ -315,13 +332,39 @@ model ExcepcionHorario {
 }
 
 model ConfiguracionTurnos {
-  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tallerId       String @unique @map("taller_id") @db.Uuid
-  margenMinutos  Int    @default(15) @map("margen_minutos")
+  id                       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId                 String  @unique @map("taller_id") @db.Uuid
+  margenMinutos            Int     @default(15) @map("margen_minutos")
+  intervaloInicioMinutos   Int     @default(15) @map("intervalo_inicio_minutos")
+  anticipacionMinimaHoras  Int     @default(0) @map("anticipacion_minima_horas")
+  anticipacionMaximaDias   Int     @default(90) @map("anticipacion_maxima_dias")
+  permiteCancelacion       Boolean @default(true) @map("permite_cancelacion")
+  horasLimiteCancelacion   Int     @default(24) @map("horas_limite_cancelacion")
 
   taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
 
   @@map("configuracion_turnos")
+}
+
+/// Partial UNIQUE `cambio_horario_taller_aplica_desde_confirmado_uidx`
+/// (taller_id, aplica_desde) WHERE estado = 'confirmado' — see migration.
+model CambioHorario {
+  id                     String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId               String              @map("taller_id") @db.Uuid
+  aplicaDesde            DateTime            @map("aplica_desde") @db.Date
+  franjas                Json
+  previewHash            String              @map("preview_hash")
+  estado                 EstadoCambioHorario @default(borrador)
+  confirmadoEn           DateTime?           @map("confirmado_en") @db.Timestamptz(6)
+  confirmadoPorUsuarioId String?             @map("confirmado_por_usuario_id") @db.Uuid
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  taller         Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  confirmadoPor  Usuario? @relation(fields: [confirmadoPorUsuarioId], references: [id], onDelete: SetNull)
+
+  @@index([tallerId, aplicaDesde], map: "ix_cambio_horario_taller_aplica")
+  @@map("cambio_horario")
 }
 
 model Cliente {
@@ -649,6 +692,8 @@ model HistorialServicio {
   servicioNombre     String   @map("servicio_nombre")
   tipoServicioNombre String?  @map("tipo_servicio_nombre")
   tallerNombre       String?  @map("taller_nombre")
+  bahiaId            String?  @map("bahia_id") @db.Uuid
+  bahiaNombre        String?  @map("bahia_nombre")
   realizadoEn        DateTime @map("realizado_en") @db.Timestamptz(6)
   kilometrajeKm      Int?     @map("kilometraje_km")
   duracionMinutos    Int?     @map("duracion_minutos")
@@ -664,6 +709,7 @@ model HistorialServicio {
   turno        Turno         @relation(fields: [turnoId], references: [id], onDelete: Restrict)
   detalleTurno DetalleTurno  @relation(fields: [detalleTurnoId], references: [id], onDelete: Restrict)
   taller       Taller        @relation(fields: [tallerId], references: [id], onDelete: Restrict)
+  bahia        Bahia?        @relation(fields: [bahiaId], references: [id], onDelete: SetNull)
   servicio     Servicio      @relation(fields: [servicioId], references: [id], onDelete: Restrict)
   tipoServicio TipoServicio? @relation(fields: [tipoServicioId], references: [id], onDelete: SetNull)
 

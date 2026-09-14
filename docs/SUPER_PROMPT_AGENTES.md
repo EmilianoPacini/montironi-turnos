@@ -75,19 +75,27 @@ Ver APÉNDICE. Preferí `/api/agents` para agenda/cliente/vehículo/turno. Prefe
 1. GET servicios
 2. GET cliente por telefono (o upsert_cliente)
 3. upsert_vehiculo si hace falta
-4. GET disponibilidad (tallerId, fecha, servicioId…)
-5. Usuario elige slot
-6. POST crear_turno (clienteId, vehiculoId, tallerId, servicioIds, inicio, canal, confirmar) + Idempotency-Key
-7. Confirmar al usuario con datos del turno devuelto
-8. (WSP) send-text de confirmación SOLO si bot no está pausado
+4. GET talleres (`resource=talleres&servicioId=`) — agrupá por localidad: “tengo talleres en Godoy Cruz… ¿preferís uno o lo antes posible?”
+5. Si elige un taller: GET proximos_slots con tallerId. Si dice cualquiera / lo antes posible: GET proximos_slots SIN tallerId.
+6. Ofrecé 3–5 opciones (día, fecha, hora, sucursal). No inventes horarios ni elijas bahía.
+7. POST crear_turno SIN bahiaId + `Idempotency-Key` obligatorio (una clave por intención).
+8. Confirmar al usuario con datos del turno. Si 409 CapacidadConflicto: NO afirmes que se creó; volvé a consultar proximos_slots y ofrecé otras opciones.
+
+# Flujo “dónde está mi auto”
+1. Pedí teléfono (o usá el del WhatsApp) y/o patente.
+2. GET `resource=estado_vehiculo` (o el campo `atencion_actual` de `/api/agents/context`).
+3. Si hay turno activo, informá estado (etiqueta), taller y bahía. Si no, el último historial.
+4. Nunca inventes estados. 404 = no encontrado, no mires otra empresa.
 
 # Errores que debés entender
-- CapacidadConflicto / 409: slot tomado → reconsultar
+- CapacidadConflicto / 409: slot tomado → reconsultar proximos_slots
+- IdempotencyConflict / 409: misma key con otro body, o request aún en proceso
 - VersionConflicto: alguien cambió el turno → GET turno y reintentar con versión nueva
 - HorarioVencido: no ofrecer ese horario
 - ValidacionCliente / 422: teléfono o nombre inválidos
-- IdempotencyReplay: misma key+body → resultado cacheado (OK); misma key body distinto → conflicto
+- IdempotencyReplay: misma key+body → resultado cacheado (OK)
 - 401: auth
+- 403: x-empresa no autorizado para la API key
 ```
 
 ---
@@ -111,27 +119,32 @@ Ver APÉNDICE. Preferí `/api/agents` para agenda/cliente/vehículo/turno. Prefe
 | WAH integration | `/api/wah/integration/*` | `X-Cima-Forward-Secret: {{CIMA_FORWARD_SECRET}}` |
 | WAH inbound / forward | Webhook Meta + `WAH_MESSAGE_WEBHOOK_URL` | Config server-side; el bot **recibe** eventos (received-data), no inventa el path |
 
-Mutaciones Agents: header `idempotency-key` (recomendado).  
+Mutaciones Agents: header `idempotency-key` **obligatorio** en `crear_turno`.  
 Mutaciones panel v1: `Idempotency-Key` + `version` / `If-Match` / `x-turno-version` según ruta.
 
 ### 2) Agents API — lectura `GET {{MONTIRONI_BASE_URL}}/api/agents`
 
-Headers: `x-api-key`, opcional `x-empresa: montironi`
+Headers: `x-api-key`, opcional `x-empresa` (debe coincidir con `AGENT_API_EMPRESA`)
 
 | resource | Query | Notas |
 |----------|-------|-------|
 | `servicios` | — | Catálogo activo de la empresa |
-| `disponibilidad` | `tallerId`, `fecha`, `servicioId` (repetible), `bahiaId?` | **No escribe** ocupación |
+| `talleres` | `servicioId?` | Sucursales activas con bahía; con servicio solo las compatibles |
+| `proximos_slots` | `servicioId`, `tallerId?`, `desde?`, `limite?` | N huecos más cercanos (max 20). No reserva |
+| `disponibilidad` | `tallerId`, `fecha`, `servicioId` (repetible), `bahiaId?` | `availability` + `ventanas_disponibles` + `horario_del_dia` |
+| `estado_vehiculo` | `telefono` / `wa_id` / `cliente_id`, `patente?` | Atención actual o último historial |
 | `turno` | `id` | Detalle turno |
-| `cliente` | `id` **o** `telefono` (E.164) | Contexto: cliente + vehículos + turnos; tel inválido → 422 |
+| `cliente` | `id` **o** `telefono` (E.164) | Contexto + `atencion_actual` |
 
 Ejemplos:
 ```
 GET /api/agents?resource=servicios
+GET /api/agents?resource=talleres&servicioId={uuid}
+GET /api/agents?resource=proximos_slots&servicioId={uuid}&limite=5
 GET /api/agents?resource=disponibilidad&tallerId={uuid}&fecha=2026-09-15&servicioId={uuid}
+GET /api/agents?resource=estado_vehiculo&telefono=%2B5493511234567&patente=AB123CD
 GET /api/agents?resource=turno&id={uuid}
 GET /api/agents?resource=cliente&telefono=%2B5493511234567
-GET /api/agents?resource=cliente&id={uuid}
 ```
 
 ### 3) Agents API — escritura `POST {{MONTIRONI_BASE_URL}}/api/agents`
@@ -146,7 +159,6 @@ Body común: `{ "action": "...", ...campos }`
 {
   "action": "crear_turno",
   "tallerId": "uuid",
-  "bahiaId": "uuid-opcional",
   "clienteId": "uuid",
   "vehiculoId": "uuid",
   "servicioIds": ["uuid"],
@@ -156,9 +168,11 @@ Body común: `{ "action": "...", ...campos }`
   "confirmar": true
 }
 ```
-- Crea hold en `ocupacion_bahia` (capacidad real).
+- Crea hold en `ocupacion_bahia` (capacidad real). El backend asigna bahía; no envíes `bahiaId`.
+- `idempotency-key` obligatorio.
 - `confirmar` default `true` en API actual.
 - Rechaza inicios pasados (`HorarioVencido`).
+- 409 `CapacidadConflicto` si el hueco se ocupó entre la consulta y el alta.
 
 #### `cancelar_turno`
 ```json
@@ -177,11 +191,10 @@ Libera ocupación (`activo=false`).
   "action": "reprogramar_turno",
   "turnoId": "uuid",
   "inicio": "2026-09-16T15:00:00.000Z",
-  "bahiaId": "uuid-opcional",
   "version": 1
 }
 ```
-Swap atómico de ocupación; conflicto → original intacto.
+Swap atómico de ocupación; el backend asigna bahía. Conflicto → original intacto.
 
 #### `upsert_cliente`
 ```json
@@ -287,13 +300,14 @@ Sin secret → 401.
 - [ ] GET disponibilidad no reserva
 - [ ] POST crear_turno sí ocupa bahía
 - [ ] Optimistic lock con `version`
-- [ ] `idempotency-key` por intención
+- [ ] `idempotency-key` obligatorio en crear_turno
 - [ ] Respetar `bot_paused`
 - [ ] Misma capacidad humanos ↔ agentes
 - [ ] Tenancy: nunca cruzar `empresa_id`
+- [ ] No elegir bahía; no inventar talleres ni estados del auto
 
 ### 7) Códigos de error tipados (orientativos)
-`CapacidadConflicto`, `VersionConflicto`, `HorarioVencido`, `ValidacionCliente`, `TransicionInvalida`, `RecursoNoEncontrado`, `IdempotencyReplay`, `FueraDeHorario`, `BahiaIncompatible`
+`CapacidadConflicto`, `VersionConflicto`, `HorarioVencido`, `ValidacionCliente`, `TransicionInvalida`, `RecursoNoEncontrado`, `IdempotencyReplay`, `IdempotencyConflict`, `FueraDeHorario`, `BahiaIncompatible`
 
 ---
 

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { getCompatibleBahias, checkSlotAvailable } from "@/lib/modules/availability/service";
 import { DomainError } from "@/lib/modules/appointments/errors";
 
@@ -31,25 +32,66 @@ export async function resolveBahiaAssignment(params: {
     return { bahiaId: params.bahiaId, autoAssigned: false };
   }
 
-  const availableBahias = [];
   for (const bahia of compatible) {
-    if (
-      await checkSlotAvailable(bahia.id, params.inicio, params.fin, params.excludeTurnoId)
-    ) {
-      availableBahias.push(bahia);
+    if (await checkSlotAvailable(bahia.id, params.inicio, params.fin, params.excludeTurnoId)) {
+      return { bahiaId: bahia.id, autoAssigned: true };
     }
   }
 
-  if (availableBahias.length === 0) {
-    throw new DomainError("Horario no disponible", "CapacidadConflicto");
+  throw new DomainError("Horario no disponible", "CapacidadConflicto");
+}
+
+export async function assignBahiaInTransaction(
+  tx: Prisma.TransactionClient,
+  params: {
+    tallerId: string;
+    servicioIds: string[];
+    inicio: Date;
+    fin: Date;
+    bahiaId?: string;
+    excludeTurnoId?: string;
+  }
+): Promise<{ bahiaId: string; autoAssigned: boolean }> {
+  const compatible = await getCompatibleBahias(params.tallerId, params.servicioIds);
+  if (compatible.length === 0) {
+    throw new DomainError("Ninguna bahía compatible con los servicios", "BahiaIncompatible");
   }
 
-  if (availableBahias.length === 1) {
-    return { bahiaId: availableBahias[0].id, autoAssigned: true };
+  const pool = params.bahiaId
+    ? compatible.filter((b) => b.id === params.bahiaId)
+    : compatible;
+
+  if (params.bahiaId && pool.length === 0) {
+    throw new DomainError("Bahía incompatible con los servicios", "BahiaIncompatible");
   }
 
-  throw new DomainError(
-    "Seleccioná una bahía — hay varias compatibles disponibles",
-    "BahiaIncompatible"
+  const ids = pool.map((b) => b.id);
+  const locked = await tx.$queryRawUnsafe<{ id: string }[]>(
+    `SELECT id
+     FROM bahia
+     WHERE id = ANY($1::uuid[])
+       AND activa = true
+     ORDER BY orden ASC, id ASC
+     FOR UPDATE SKIP LOCKED`,
+    ids
   );
+
+  for (const row of locked) {
+    const conflict = await tx.ocupacionBahia.findFirst({
+      where: {
+        bahiaId: row.id,
+        activo: true,
+        inicio: { lt: params.fin },
+        fin: { gt: params.inicio },
+        ...(params.excludeTurnoId
+          ? { OR: [{ turnoId: null }, { turnoId: { not: params.excludeTurnoId } }] }
+          : {}),
+      },
+    });
+    if (!conflict) {
+      return { bahiaId: row.id, autoAssigned: !params.bahiaId };
+    }
+  }
+
+  throw new DomainError("Horario no disponible", "CapacidadConflicto");
 }

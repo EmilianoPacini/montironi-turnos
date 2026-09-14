@@ -11,6 +11,7 @@ import { FormError } from "@/components/ui/FormError";
 import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
 import { InlineClienteModal } from "@/components/clientes/InlineClienteModal";
 import { InlineVehiculoModal } from "@/components/clientes/InlineVehiculoModal";
+import { TimeClockPicker } from "@/components/ui/TimeClockPicker";
 
 interface ClienteOption {
   id: string;
@@ -309,15 +310,15 @@ export function NuevoTurnoForm({
           </label>
           <label className="block text-sm sm:col-span-1">
             <span className="mb-1 block font-medium">Hora</span>
-            <input
-              type="time"
-              required
-              data-field="hora"
+            <TimeClockPicker
               value={hora}
-              onChange={(e) => setHora(e.target.value)}
+              onChange={setHora}
+              data-field="hora"
+              aria-label="Hora del turno"
+              aria-invalid={Boolean(errorState?.fieldErrors?.hora)}
               className={fieldClass(
                 "hora",
-                "w-full rounded-lg border border-slate-300 px-3 py-2"
+                "inline-flex w-full items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm tabular-nums shadow-sm transition hover:border-blue-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               )}
             />
             <FieldErrorMessage field="hora" />

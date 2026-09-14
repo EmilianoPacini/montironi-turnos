@@ -35,6 +35,7 @@ async function main() {
   await prisma.franjaHoraria.deleteMany();
   await prisma.patronHorario.deleteMany();
   await prisma.excepcionHorario.deleteMany();
+  await prisma.cambioHorario.deleteMany();
   await prisma.bahiaServicio.deleteMany();
   await prisma.tallerServicio.deleteMany();
   await prisma.servicio.deleteMany();
@@ -81,7 +82,11 @@ async function main() {
     data: {
       empresaId: empresa.id,
       nombre: "Taller Centro",
-      direccion: "Av. Corrientes 1234, CABA",
+      direccion: "San Martín 123, Godoy Cruz, Mendoza",
+      calle: "San Martín",
+      numero: "123",
+      localidad: "Godoy Cruz",
+      provincia: "Mendoza",
     },
   });
 
@@ -89,7 +94,11 @@ async function main() {
     data: {
       empresaId: empresa.id,
       nombre: "Taller Norte",
-      direccion: "Av. del Libertador 5678",
+      direccion: "Av. del Libertador 5678, Las Heras, Mendoza",
+      calle: "Av. del Libertador",
+      numero: "5678",
+      localidad: "Las Heras",
+      provincia: "Mendoza",
     },
   });
 
@@ -332,10 +341,10 @@ async function main() {
   const waAccount = await prisma.whatsappAccount.create({
     data: {
       empresaId: empresa.id,
-      phoneNumberId: "PLACEHOLDER_PHONE_NUMBER_ID",
-      displayPhoneNumber: "+54 351 555-0100",
-      label: "Montironi Postventa (demo)",
-      wabaId: "demo-waba-placeholder",
+      phoneNumberId: "1285123408020696",
+      displayPhoneNumber: "5492616106452",
+      label: "Montironi Servicios Taller",
+      wabaId: "1970101330374296",
     },
   });
 

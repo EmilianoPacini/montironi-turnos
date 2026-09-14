@@ -82,6 +82,7 @@ export async function getClienteContext(params: {
       vehiculo: true,
       detalles: true,
       bahia: true,
+      taller: true,
     },
   });
 
@@ -94,6 +95,8 @@ export async function getClienteContext(params: {
     patente: t.vehiculo.patente,
     servicios: t.detalles.map((d) => d.nombreSnapshot),
     bahia: t.bahia?.nombre ?? null,
+    tallerId: t.tallerId,
+    tallerNombre: t.taller?.nombre ?? null,
   }));
 
   const programados = mappedTurnos.filter(
@@ -101,13 +104,19 @@ export async function getClienteContext(params: {
   );
   const realizados = mappedTurnos.filter((t) => t.estado === "finalizado");
 
-  const [historialRows, perfilBuyer] = await Promise.all([
+  const [historialRows, perfilBuyer, atencion] = await Promise.all([
     listHistorialForCliente({
       empresaId: params.empresaId,
       clienteId: cliente.id,
       limit: 10,
     }),
     getPerfilBuyerForCliente(params.empresaId, cliente.id),
+    import("@/lib/modules/appointments/atencion").then((m) =>
+      m.resolverAtencionVehiculo({
+        empresaId: params.empresaId,
+        clienteId: cliente.id,
+      })
+    ),
   ]);
 
   const buyerProfile = perfilBuyer ? serializePerfilBuyer(perfilBuyer) : null;
@@ -139,6 +148,10 @@ export async function getClienteContext(params: {
       perfilBuyer: buyerProfile,
       historial_services: historialRows,
       ultimosServices: historialRows,
+      atencion_actual:
+        atencion && atencion.multiple === false ? atencion.atencion_actual : null,
+      ultimo_historial:
+        atencion && atencion.multiple === false ? atencion.ultimo_historial : null,
       meta: {
         partial: false,
         missing,

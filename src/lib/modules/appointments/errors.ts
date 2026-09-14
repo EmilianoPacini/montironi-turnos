@@ -9,6 +9,7 @@ export type DomainErrorCode =
   | "TurnoNoReprogramable"
   | "RecursoNoEncontrado"
   | "IdempotencyReplay"
+  | "IdempotencyConflict"
   | "ValidacionCliente";
 
 export class DomainError extends Error {
@@ -33,6 +34,7 @@ export function httpStatusForDomainError(code: DomainErrorCode): number {
     case "RecursoNoEncontrado":
       return 404;
     case "VersionConflicto":
+    case "IdempotencyConflict":
       return 409;
     case "TransicionInvalida":
     case "TurnoNoReprogramable":

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   validateAgentApiKey,
-  getEmpresaBySlug,
+  resolveAgentEmpresa,
 } from "@/lib/modules/agents-api/idempotency";
 import {
   getClienteContext,
@@ -13,11 +13,9 @@ function unauthorized() {
 }
 
 async function resolveEmpresa(request: NextRequest) {
-  const slug =
-    request.nextUrl.searchParams.get("empresa") ??
-    request.headers.get("x-empresa") ??
-    "montironi";
-  return getEmpresaBySlug(slug);
+  const resolved = await resolveAgentEmpresa(request);
+  if (!resolved.ok) return resolved;
+  return { ok: true as const, empresa: resolved.empresa };
 }
 
 /**
@@ -28,10 +26,14 @@ async function resolveEmpresa(request: NextRequest) {
 export async function GET(request: NextRequest) {
   if (!validateAgentApiKey(request)) return unauthorized();
 
-  const empresa = await resolveEmpresa(request);
-  if (!empresa) {
-    return NextResponse.json({ error: "Empresa no encontrada" }, { status: 404 });
+  const resolved = await resolveEmpresa(request);
+  if (!resolved.ok) {
+    return NextResponse.json(
+      { error: resolved.error, code: resolved.status === 403 ? "FORBIDDEN" : "NOT_FOUND" },
+      { status: resolved.status }
+    );
   }
+  const empresa = resolved.empresa;
 
   const telefono = request.nextUrl.searchParams.get("telefono") ?? undefined;
   const waId = request.nextUrl.searchParams.get("wa_id") ?? undefined;

@@ -17,4 +17,4 @@ export {
 } from "@/lib/modules/appointments/service";
 
 export { getAgendaForDate } from "@/lib/modules/availability/service";
-export { getAvailabilityForDate } from "@/lib/modules/availability/service";
+export { getAvailabilityForDate, proximosSlots, resolverHorario } from "@/lib/modules/availability/service";

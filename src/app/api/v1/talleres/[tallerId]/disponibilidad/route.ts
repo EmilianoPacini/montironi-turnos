@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
-import { parseISO, startOfDay } from "date-fns";
+import { format, parseISO, startOfDay } from "date-fns";
 import { requireSession } from "@/lib/auth/session";
 import prisma from "@/lib/db";
-import { getAvailabilityForDate } from "@/lib/modules/agenda/application";
+import {
+  aggregateVentanas,
+  getAvailabilityForDate,
+  getTallerScheduleForDate,
+} from "@/lib/modules/availability/service";
 import { DomainError } from "@/lib/modules/agenda/domain/errors";
 import { domainErrorResponse } from "@/lib/modules/agenda/api/http";
 
@@ -32,15 +36,26 @@ export async function GET(
       throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
     }
 
+    const date = startOfDay(parseISO(fecha));
     const availability = await getAvailabilityForDate({
       empresaId: session.empresaId,
       tallerId,
-      date: startOfDay(parseISO(fecha)),
+      date,
       servicioIds,
       bahiaId,
     });
+    const schedule = await getTallerScheduleForDate(tallerId, date);
 
-    return Response.json({ fecha, tallerId, availability });
+    return Response.json({
+      fecha,
+      tallerId,
+      availability,
+      horario_del_dia: schedule.map((w) => ({
+        abre: format(w.inicio, "HH:mm"),
+        cierra: format(w.fin, "HH:mm"),
+      })),
+      ventanas_disponibles: aggregateVentanas(availability),
+    });
   } catch (e) {
     return domainErrorResponse(e);
   }

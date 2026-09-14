@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WahAccountForm } from "@/components/wah/WahAccountForm";
 import { WahAccountSwitcher } from "@/components/wah/WahAccountSwitcher";
 import { WahChatPanel } from "@/components/wah/WahChatPanel";
 import { WahConversationList } from "@/components/wah/WahConversationList";
@@ -13,12 +14,12 @@ import {
 
 type Filter = "all" | "pending" | "unread";
 
-export function WahInbox() {
+export function WahInbox({ canManageAccounts = false }: { canManageAccounts?: boolean }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const { data: accountsData } = useWahAccounts();
+  const { data: accountsData, mutate: refreshAccounts } = useWahAccounts();
   const accounts = accountsData?.accounts ?? [];
 
   const { data: dashboardData, isLoading: dashboardLoading, mutate: refreshDashboard } =
@@ -39,7 +40,18 @@ export function WahInbox() {
   return (
     <div className="flex h-[calc(100vh-4rem)] min-h-[32rem] flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <WahAccountSwitcher accounts={accounts} value={accountId} onChange={setAccountId} />
+        <div className="flex flex-wrap items-center gap-3">
+          <WahAccountSwitcher accounts={accounts} value={accountId} onChange={setAccountId} />
+          {canManageAccounts ? (
+            <WahAccountForm
+              onSaved={(account) => {
+                void refreshAccounts();
+                setAccountId(account.id);
+                setSelectedId(null);
+              }}
+            />
+          ) : null}
+        </div>
         <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs shadow-sm">
           {(
             [

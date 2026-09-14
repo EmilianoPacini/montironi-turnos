@@ -1,13 +1,17 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
-import { assertWithinSchedule, getMargenMin } from "@/lib/modules/availability/service";
+import {
+  assertAnticipacion,
+  assertWithinSchedule,
+  getMargenMin,
+} from "@/lib/modules/availability/service";
 import { isActiveEstado } from "@/lib/modules/appointments/constants";
 import { DomainError } from "@/lib/modules/appointments/errors";
 import {
   insertOcupacionTurno,
   liberateOcupacionTurno,
 } from "@/lib/modules/appointments/application/internal/occupation";
-import { resolveBahiaAssignment } from "@/lib/modules/appointments/application/resolve-bahia";
+import { assignBahiaInTransaction } from "@/lib/modules/appointments/application/resolve-bahia";
 import { assertNotPastInicio } from "@/lib/modules/appointments/application/validation";
 
 export async function rescheduleTurno(params: {
@@ -38,27 +42,8 @@ export async function rescheduleTurno(params: {
 
   try {
     await assertWithinSchedule(turno.tallerId, params.inicio, finalizaEn);
+    await assertAnticipacion(turno.tallerId, params.inicio);
     assertNotPastInicio(params.inicio);
-  } catch (e) {
-    if (e instanceof DomainError) {
-      throw new DomainError(
-        "Conflicto al reprogramar — se mantiene el horario anterior",
-        "CapacidadConflicto"
-      );
-    }
-    throw e;
-  }
-
-  let resolvedBahiaId: string;
-  try {
-    ({ bahiaId: resolvedBahiaId } = await resolveBahiaAssignment({
-      tallerId: turno.tallerId,
-      servicioIds,
-      inicio: params.inicio,
-      fin: finalizaEn,
-      bahiaId: params.bahiaId ?? turno.bahiaId,
-      excludeTurnoId: turno.id,
-    }));
   } catch (e) {
     if (e instanceof DomainError) {
       throw new DomainError(
@@ -71,6 +56,15 @@ export async function rescheduleTurno(params: {
 
   try {
     return await prisma.$transaction(async (tx) => {
+      const { bahiaId: resolvedBahiaId } = await assignBahiaInTransaction(tx, {
+        tallerId: turno.tallerId,
+        servicioIds,
+        inicio: params.inicio,
+        fin: finalizaEn,
+        bahiaId: params.bahiaId,
+        excludeTurnoId: turno.id,
+      });
+
       await liberateOcupacionTurno(tx, turno.id);
 
       await insertOcupacionTurno(tx, {
@@ -106,6 +100,13 @@ export async function rescheduleTurno(params: {
       });
     });
   } catch (e) {
+    if (e instanceof DomainError) {
+      if (e.code === "VersionConflicto" || e.code === "RecursoNoEncontrado") throw e;
+      throw new DomainError(
+        "Conflicto al reprogramar — se mantiene el horario anterior",
+        "CapacidadConflicto"
+      );
+    }
     if (
       e instanceof Error &&
       (e.message.includes("ocupacion_bahia_no_overlap") ||

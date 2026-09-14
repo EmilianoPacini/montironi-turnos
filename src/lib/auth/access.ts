@@ -14,6 +14,7 @@ export const KNOWN_PANEL_ROLES: readonly RolUsuario[] = [
 export const ADMIN_ONLY_PATH_PREFIXES = [
   "/servicios",
   "/configuracion",
+  "/taller",
   "/usuarios",
   "/bahias",
   "/movimientos",

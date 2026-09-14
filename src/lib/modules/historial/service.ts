@@ -16,6 +16,7 @@ export async function upsertHistorialDesdeTurnoFinalizado(
         },
       },
       taller: true,
+      bahia: true,
     },
   });
 
@@ -37,6 +38,8 @@ export async function upsertHistorialDesdeTurnoFinalizado(
         servicioNombre: detalle.nombreSnapshot,
         tipoServicioNombre: detalle.servicio.tipoServicio?.nombre ?? null,
         tallerNombre: turno.taller.nombre,
+        bahiaId: turno.bahiaId,
+        bahiaNombre: turno.bahia?.nombre ?? null,
         realizadoEn,
         kilometrajeKm,
         duracionMinutos: detalle.duracionMin,
@@ -48,6 +51,8 @@ export async function upsertHistorialDesdeTurnoFinalizado(
         servicioNombre: detalle.nombreSnapshot,
         tipoServicioNombre: detalle.servicio.tipoServicio?.nombre ?? null,
         tallerNombre: turno.taller.nombre,
+        bahiaId: turno.bahiaId,
+        bahiaNombre: turno.bahia?.nombre ?? null,
         realizadoEn,
         kilometrajeKm,
         duracionMinutos: detalle.duracionMin,
@@ -93,6 +98,7 @@ export function serializeHistorialRow(row: {
   servicioNombre: string;
   tipoServicioNombre: string | null;
   tallerNombre: string | null;
+  bahiaNombre?: string | null;
   realizadoEn: Date;
   kilometrajeKm: number | null;
   duracionMinutos: number | null;
@@ -107,6 +113,7 @@ export function serializeHistorialRow(row: {
     servicioNombre: row.servicioNombre,
     tipoServicioNombre: row.tipoServicioNombre,
     tallerNombre: row.tallerNombre,
+    bahiaNombre: row.bahiaNombre ?? null,
     realizadoEn: row.realizadoEn.toISOString(),
     kilometrajeKm: row.kilometrajeKm,
     duracionMinutos: row.duracionMinutos,
