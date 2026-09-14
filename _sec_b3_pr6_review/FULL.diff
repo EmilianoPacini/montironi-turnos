@@ -1,0 +1,348 @@
+diff --git a/docs/SECURITY_TENANT_ISOLATION.md b/docs/SECURITY_TENANT_ISOLATION.md
+new file mode 100644
+index 0000000..a92ae17
+--- /dev/null
++++ b/docs/SECURITY_TENANT_ISOLATION.md
+@@ -0,0 +1,24 @@
++# B3 — Aislamiento multi-tenant (IDOR)
++
++Historia AppSec **B3**: cerrar IDORs en mutaciones de dominio sin RLS completo.
++
++## Regla
++
++Toda mutación `find`/`update`/`upsert` usa scope `{ id, empresaId }` (o equivalente vía join). Si el recurso no pertenece al tenant del actor → `DomainError` `RecursoNoEncontrado` (HTTP 404). Nunca mutar cross-tenant.
++
++## Alcance B3
++
++| Servicio | Fix |
++|----------|-----|
++| `upsertCliente` | `updateMany` con `{ id, empresaId }` |
++| `createTurno` | Valida `clienteId`, `vehiculoId`, `tallerId` y vínculo cliente↔vehículo en `empresaId` |
++| `updateConfiguracionTaller` | Requiere `empresaId`; verifica `taller.empresaId` antes del upsert |
++| `createServicio` | Verifica `tipoServicioId` en la misma empresa |
++
++## Tests
++
++`tests/integration/tenant-isolation.test.ts` — fixture de 2 empresas cubre los 4 casos (incl. `POST /api/agents` `upsert_cliente`).
++
++## Fuera de alcance
++
++RLS a nivel PostgreSQL, historias B4–B8.
+diff --git a/src/lib/modules/appointments/actions.ts b/src/lib/modules/appointments/actions.ts
+index 9e9ec02..89e8bf7 100644
+--- a/src/lib/modules/appointments/actions.ts
++++ b/src/lib/modules/appointments/actions.ts
+@@ -368,10 +368,11 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
+       redirect("/agenda");
+     }
+ 
+-    await updateConfiguracionTaller(
+-      String(formData.get("tallerId")),
+-      Number(formData.get("margenMinutos"))
+-    );
++    await updateConfiguracionTaller({
++      tallerId: String(formData.get("tallerId")),
++      empresaId: session.empresaId,
++      margenMinutos: Number(formData.get("margenMinutos")),
++    });
+     revalidatePath("/configuracion");
+     redirect("/configuracion");
+   } catch (e) {
+diff --git a/src/lib/modules/appointments/service.ts b/src/lib/modules/appointments/service.ts
+index 7005d3d..47e6e49 100644
+--- a/src/lib/modules/appointments/service.ts
++++ b/src/lib/modules/appointments/service.ts
+@@ -153,7 +153,35 @@ export async function crearTurnoPendiente(input: Omit<CreateTurnoInput, "confirm
+   return createTurno({ ...input, confirmar: false });
+ }
+ 
++async function assertCreateTurnoTenantScope(input: CreateTurnoInput) {
++  const [cliente, vehiculo, taller, link] = await Promise.all([
++    prisma.cliente.findFirst({
++      where: { id: input.clienteId, empresaId: input.empresaId },
++    }),
++    prisma.vehiculo.findFirst({
++      where: { id: input.vehiculoId, empresaId: input.empresaId },
++    }),
++    prisma.taller.findFirst({
++      where: { id: input.tallerId, empresaId: input.empresaId },
++    }),
++    prisma.clienteVehiculo.findFirst({
++      where: {
++        clienteId: input.clienteId,
++        vehiculoId: input.vehiculoId,
++        cliente: { empresaId: input.empresaId },
++        vehiculo: { empresaId: input.empresaId },
++      },
++    }),
++  ]);
++
++  if (!cliente || !vehiculo || !taller || !link) {
++    throw new DomainError("Recurso no encontrado", "RecursoNoEncontrado");
++  }
++}
++
+ export async function createTurno(input: CreateTurnoInput) {
++  await assertCreateTurnoTenantScope(input);
++
+   const { duracionMin, servicios } = await calcularDuracionTotal({
+     empresaId: input.empresaId,
+     tallerId: input.tallerId,
+diff --git a/src/lib/modules/catalog/service.ts b/src/lib/modules/catalog/service.ts
+index 06b2df5..4d7164e 100644
+--- a/src/lib/modules/catalog/service.ts
++++ b/src/lib/modules/catalog/service.ts
+@@ -1,4 +1,5 @@
+ import prisma from "@/lib/db";
++import { DomainError } from "@/lib/modules/appointments/errors";
+ 
+ export async function listServicios(empresaId: string) {
+   return prisma.servicio.findMany({
+@@ -49,11 +50,22 @@ export async function getConfiguracionTaller(tallerId: string) {
+   return prisma.configuracionTurnos.findUnique({ where: { tallerId } });
+ }
+ 
+-export async function updateConfiguracionTaller(tallerId: string, margenMinutos: number) {
++export async function updateConfiguracionTaller(params: {
++  tallerId: string;
++  empresaId: string;
++  margenMinutos: number;
++}) {
++  const taller = await prisma.taller.findFirst({
++    where: { id: params.tallerId, empresaId: params.empresaId },
++  });
++  if (!taller) {
++    throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
++  }
++
+   return prisma.configuracionTurnos.upsert({
+-    where: { tallerId },
+-    create: { tallerId, margenMinutos },
+-    update: { margenMinutos },
++    where: { tallerId: params.tallerId },
++    create: { tallerId: params.tallerId, margenMinutos: params.margenMinutos },
++    update: { margenMinutos: params.margenMinutos },
+   });
+ }
+ 
+@@ -66,6 +78,13 @@ export async function createServicio(params: {
+   precio: number;
+   modoPrecio?: "fijo" | "desde" | "a_presupuestar";
+ }) {
++  const tipoServicio = await prisma.tipoServicio.findFirst({
++    where: { id: params.tipoServicioId, empresaId: params.empresaId },
++  });
++  if (!tipoServicio) {
++    throw new DomainError("Tipo de servicio no encontrado", "RecursoNoEncontrado");
++  }
++
+   return prisma.servicio.create({
+     data: {
+       empresaId: params.empresaId,
+diff --git a/src/lib/modules/customers/service.ts b/src/lib/modules/customers/service.ts
+index d50c60c..eb1665d 100644
+--- a/src/lib/modules/customers/service.ts
++++ b/src/lib/modules/customers/service.ts
+@@ -200,8 +200,8 @@ export async function upsertCliente(params: {
+   const { nombre, apellido, telefono } = assertClienteRequiredFields(params);
+ 
+   if (params.id) {
+-    return prisma.cliente.update({
+-      where: { id: params.id },
++    const updated = await prisma.cliente.updateMany({
++      where: { id: params.id, empresaId: params.empresaId },
+       data: {
+         nombre,
+         apellido,
+@@ -211,6 +211,12 @@ export async function upsertCliente(params: {
+         notas: params.notas,
+       },
+     });
++    if (updated.count === 0) {
++      throw new DomainError("Cliente no encontrado", "RecursoNoEncontrado");
++    }
++    return prisma.cliente.findFirstOrThrow({
++      where: { id: params.id, empresaId: params.empresaId },
++    });
+   }
+ 
+   return prisma.cliente.create({
+diff --git a/tests/helpers/fixture.ts b/tests/helpers/fixture.ts
+index 05a53d8..9424222 100644
+--- a/tests/helpers/fixture.ts
++++ b/tests/helpers/fixture.ts
+@@ -13,6 +13,7 @@ export interface TestFixture {
+   clienteId: string;
+   vehiculoId: string;
+   servicioId: string;
++  tipoServicioId: string;
+   slotInicio: Date;
+   userId?: string;
+ }
+@@ -123,6 +124,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
+     clienteId: cliente.id,
+     vehiculoId: vehiculo.id,
+     servicioId: servicio.id,
++    tipoServicioId: tipo.id,
+     slotInicio,
+     userId: usuario.id,
+   };
+diff --git a/tests/integration/tenant-isolation.test.ts b/tests/integration/tenant-isolation.test.ts
+new file mode 100644
+index 0000000..a204f6e
+--- /dev/null
++++ b/tests/integration/tenant-isolation.test.ts
+@@ -0,0 +1,153 @@
++import { NextRequest } from "next/server";
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { POST as agentsPost } from "@/app/api/agents/route";
++import { upsertCliente } from "@/lib/modules/customers/service";
++import { createTurno } from "@/lib/modules/appointments/service";
++import {
++  createServicio,
++  updateConfiguracionTaller,
++} from "@/lib/modules/catalog/service";
++import {
++  createTestFixture,
++  destroyTestFixture,
++  prisma,
++  slotAt,
++  type TestFixture,
++} from "../helpers/fixture";
++
++describe("B3 · Aislamiento multi-tenant (IDOR)", () => {
++  let empresaA: TestFixture;
++  let empresaB: TestFixture;
++  const apiKey = process.env.AGENT_API_KEY ?? "montironi-agent-api-key-dev";
++
++  beforeAll(async () => {
++    const suffix = Date.now().toString();
++    empresaA = await createTestFixture(`tenant-a-${suffix}`);
++    empresaB = await createTestFixture(`tenant-b-${suffix}`);
++  });
++
++  afterAll(async () => {
++    await destroyTestFixture(empresaA.empresaId);
++    await destroyTestFixture(empresaB.empresaId);
++    await prisma.$disconnect();
++  });
++
++  it("upsertCliente — empresa B no puede actualizar cliente de A", async () => {
++    const original = await prisma.cliente.findUniqueOrThrow({
++      where: { id: empresaA.clienteId },
++    });
++
++    await expect(
++      upsertCliente({
++        empresaId: empresaB.empresaId,
++        id: empresaA.clienteId,
++        nombre: "Hackeado",
++        apellido: "CrossTenant",
++        telefono: "+5491111111111",
++      })
++    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
++
++    const unchanged = await prisma.cliente.findUniqueOrThrow({
++      where: { id: empresaA.clienteId },
++    });
++    expect(unchanged.nombre).toBe(original.nombre);
++    expect(unchanged.apellido).toBe(original.apellido);
++  });
++
++  it("POST /api/agents upsert_cliente — empresa B no puede actualizar cliente de A", async () => {
++    const original = await prisma.cliente.findUniqueOrThrow({
++      where: { id: empresaA.clienteId },
++    });
++
++    const request = new NextRequest("http://localhost/api/agents", {
++      method: "POST",
++      headers: {
++        "content-type": "application/json",
++        "x-api-key": apiKey,
++        "x-empresa": empresaB.empresaSlug,
++      },
++      body: JSON.stringify({
++        action: "upsert_cliente",
++        id: empresaA.clienteId,
++        nombre: "Hackeado API",
++        apellido: "CrossTenant",
++        telefono: "+5491122222222",
++      }),
++    });
++
++    const response = await agentsPost(request);
++    const body = (await response.json()) as { code?: string };
++
++    expect(response.status).toBe(404);
++    expect(body.code).toBe("RecursoNoEncontrado");
++
++    const unchanged = await prisma.cliente.findUniqueOrThrow({
++      where: { id: empresaA.clienteId },
++    });
++    expect(unchanged.nombre).toBe(original.nombre);
++  });
++
++  it("createTurno — empresa B no puede referenciar taller/cliente/vehículo de A", async () => {
++    const inicio = slotAt(empresaB.slotInicio, 60);
++
++    await expect(
++      createTurno({
++        empresaId: empresaB.empresaId,
++        tallerId: empresaA.tallerId,
++        bahiaId: empresaA.bahiaId,
++        clienteId: empresaA.clienteId,
++        vehiculoId: empresaA.vehiculoId,
++        servicioIds: [empresaB.servicioId],
++        inicio,
++      })
++    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
++
++    const turnosA = await prisma.turno.count({
++      where: { empresaId: empresaA.empresaId },
++    });
++    const turnosB = await prisma.turno.count({
++      where: { empresaId: empresaB.empresaId },
++    });
++    expect(turnosA).toBe(0);
++    expect(turnosB).toBe(0);
++  });
++
++  it("updateConfiguracionTaller — empresa B no puede modificar taller de A", async () => {
++    const configBefore = await prisma.configuracionTurnos.findUniqueOrThrow({
++      where: { tallerId: empresaA.tallerId },
++    });
++
++    await expect(
++      updateConfiguracionTaller({
++        tallerId: empresaA.tallerId,
++        empresaId: empresaB.empresaId,
++        margenMinutos: 99,
++      })
++    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
++
++    const configAfter = await prisma.configuracionTurnos.findUniqueOrThrow({
++      where: { tallerId: empresaA.tallerId },
++    });
++    expect(configAfter.margenMinutos).toBe(configBefore.margenMinutos);
++  });
++
++  it("createServicio — empresa B no puede usar tipoServicio de A", async () => {
++    await expect(
++      createServicio({
++        empresaId: empresaB.empresaId,
++        tipoServicioId: empresaA.tipoServicioId,
++        nombre: "Servicio cross-tenant",
++        duracionMin: 30,
++        precio: 500,
++      })
++    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
++
++    const crossRef = await prisma.servicio.findFirst({
++      where: {
++        empresaId: empresaB.empresaId,
++        tipoServicioId: empresaA.tipoServicioId,
++      },
++    });
++    expect(crossRef).toBeNull();
++  });
++});

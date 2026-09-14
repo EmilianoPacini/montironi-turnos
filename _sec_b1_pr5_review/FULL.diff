@@ -1,0 +1,1060 @@
+diff --git a/docs/SECURITY_SESSIONS.md b/docs/SECURITY_SESSIONS.md
+new file mode 100644
+index 0000000..1dd9ee2
+--- /dev/null
++++ b/docs/SECURITY_SESSIONS.md
+@@ -0,0 +1,80 @@
++# Server-side sessions (B1 + B2)
++
++## Model
++
++- **Cookie** (`montironi_session`): iron-session, HttpOnly, encrypted payload contains **only** `{ sessionId }` (opaque UUID).
++- **DB** (`sesion`): source of truth for validity, tenancy (`empresaId`), and user state.
++
++| Field | Purpose |
++|-------|---------|
++| `id` | Opaque session id (stored in cookie) |
++| `usuarioId` | Owner — indexed for bulk revocation |
++| `empresaId` | Tenancy scope |
++| `createdAt` | Audit |
++| `lastSeenAt` | Sliding idle window |
++| `expiresAt` | Absolute TTL (12h from creation) |
++| `revokedAt` | Set on logout or security events |
++| `userAgent`, `ip` | Optional client metadata |
++
++## Lifetimes
++
++| Rule | Value |
++|------|-------|
++| Absolute TTL | 12 hours from `createdAt` / `expiresAt` |
++| Idle timeout | 45 minutes since `lastSeenAt` (sliding; updated on each authenticated request) |
++
++On read, expired or idle sessions return **401** and the row is revoked (`revokedAt` set).
++
++## Authorization
++
++`requireSession` / `getAuthSession`:
++
++1. Read `sessionId` from cookie.
++2. Load `sesion` + `usuario` from DB.
++3. Require `revokedAt IS NULL`, `now < expiresAt`, idle OK, `usuario.activo = true`.
++4. **`rol` always from `usuario` in DB** — never from cookie.
++
++## Revocation triggers
++
++| Event | Action |
++|-------|--------|
++| Logout | Revoke current session + destroy cookie |
++| `usuario.activo = false` | `revokeSessionsOnUserDeactivated(usuarioId)` |
++| Password change | `revokeSessionsOnPasswordChange(usuarioId)` |
++| Role change | `revokeSessionsOnRoleChange(usuarioId)` |
++
++Helpers live in `src/lib/auth/session/revoke-session.use-case.ts`.
++
++## API key flows (unchanged)
++
++`/api/agents` and cron `POST /api/v1/jobs/vencer-pendientes` with `x-api-key` do **not** use cookie sessions.
++
++## Maintenance
++
++```bash
++npx tsx scripts/cleanup-expired-sessions.ts
++```
++
++Deletes session rows expired or revoked more than 12h ago.
++
++## NFR (AppSec)
++
++| Requirement | Implementation |
++|-------------|----------------|
++| Indexes | `usuario_id` (mass revoke), `expires_at` (cleanup cron) |
++| Cookie flags | `httpOnly`, `secure` in production, `sameSite: lax` |
++| Anti-fixation | Login revokes prior cookie session, clears cookie, **always** inserts new `sesion` row |
++| Tenancy | `sesion.empresaId` must match `usuario.empresaId`; resolved `empresaId` returned from `usuario` |
++| Logging | Never log `sessionId` in plaintext (counts/metadata only) |
++
++## Key modules
++
++```
++src/lib/auth/session/
++  constants.ts
++  repository.ts
++  create-session.use-case.ts
++  validate-session.use-case.ts
++  revoke-session.use-case.ts
++  cookie.ts
++```
+diff --git a/package.json b/package.json
+index 5cf4feb..e7b0703 100644
+--- a/package.json
++++ b/package.json
+@@ -15,7 +15,8 @@
+     "test": "vitest run",
+     "test:unit": "vitest run tests/unit",
+     "test:integration": "vitest run tests/integration",
+-    "test:watch": "vitest"
++    "test:watch": "vitest",
++    "sessions:cleanup": "tsx scripts/cleanup-expired-sessions.ts"
+   },
+   "prisma": {
+     "seed": "tsx prisma/seed.ts"
+diff --git a/prisma/migrations/20260911225000_sesion_server_side/migration.sql b/prisma/migrations/20260911225000_sesion_server_side/migration.sql
+new file mode 100644
+index 0000000..d48b5c5
+--- /dev/null
++++ b/prisma/migrations/20260911225000_sesion_server_side/migration.sql
+@@ -0,0 +1,26 @@
++-- CreateTable
++CREATE TABLE "sesion" (
++    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
++    "usuario_id" UUID NOT NULL,
++    "empresa_id" UUID NOT NULL,
++    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    "last_seen_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    "expires_at" TIMESTAMPTZ(6) NOT NULL,
++    "revoked_at" TIMESTAMPTZ(6),
++    "user_agent" TEXT,
++    "ip" TEXT,
++
++    CONSTRAINT "sesion_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateIndex
++CREATE INDEX "sesion_usuario_id_idx" ON "sesion"("usuario_id");
++
++-- CreateIndex
++CREATE INDEX "sesion_expires_at_idx" ON "sesion"("expires_at");
++
++-- AddForeignKey
++ALTER TABLE "sesion" ADD CONSTRAINT "sesion_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "usuario"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++
++-- AddForeignKey
++ALTER TABLE "sesion" ADD CONSTRAINT "sesion_empresa_id_fkey" FOREIGN KEY ("empresa_id") REFERENCES "empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 32f6a07..309a34d 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -120,6 +120,7 @@ model Empresa {
+   wahConversations   WahConversation[]
+   wahMessages        WahMessage[]
+   wahMedia           WahMedia[]
++  sesiones           Sesion[]
+ 
+   @@map("empresa")
+ }
+@@ -142,11 +143,31 @@ model Usuario {
+   movimientos   Movimiento[]
+   wahMessagesSent       WahMessage[]      @relation("WahMessageSender")
+   whatsappAccountsOwned WhatsappAccount[] @relation("WahAccountOwner")
++  sesiones              Sesion[]
+ 
+   @@unique([empresaId, email])
+   @@map("usuario")
+ }
+ 
++model Sesion {
++  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
++  usuarioId  String    @map("usuario_id") @db.Uuid
++  empresaId  String    @map("empresa_id") @db.Uuid
++  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
++  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
++  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
++  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
++  userAgent  String?   @map("user_agent")
++  ip         String?   @map("ip")
++
++  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
++  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
++
++  @@index([usuarioId])
++  @@index([expiresAt])
++  @@map("sesion")
++}
++
+ model Taller {
+   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+   empresaId String   @map("empresa_id") @db.Uuid
+diff --git a/scripts/cleanup-expired-sessions.ts b/scripts/cleanup-expired-sessions.ts
+new file mode 100644
+index 0000000..802df1c
+--- /dev/null
++++ b/scripts/cleanup-expired-sessions.ts
+@@ -0,0 +1,26 @@
++/**
++ * Optional maintenance: delete expired or long-revoked session rows.
++ * Usage: npx tsx scripts/cleanup-expired-sessions.ts
++ */
++import prisma from "../src/lib/db";
++import { SESSION_ABSOLUTE_TTL_MS } from "../src/lib/auth/session/constants";
++
++async function main() {
++  const cutoff = new Date(Date.now() - SESSION_ABSOLUTE_TTL_MS);
++  const result = await prisma.sesion.deleteMany({
++    where: {
++      OR: [
++        { expiresAt: { lt: cutoff } },
++        { revokedAt: { lt: cutoff } },
++      ],
++    },
++  });
++  console.log(`Deleted ${result.count} expired/revoked session row(s) older than ${cutoff.toISOString()}`);
++}
++
++main()
++  .catch((err) => {
++    console.error(err);
++    process.exit(1);
++  })
++  .finally(() => prisma.$disconnect());
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 4c47ce3..834b825 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,10 +1,15 @@
+ import { redirect } from "next/navigation";
+-import { getSession } from "@/lib/auth/session";
++import { readCookieSessionId, validateServerSession } from "@/lib/auth/session/index";
+ 
+ export default async function HomePage() {
+-  const session = await getSession();
+-  if (session.isLoggedIn) {
+-    redirect("/agenda");
++  const sessionId = await readCookieSessionId();
++  if (sessionId) {
++    try {
++      await validateServerSession(sessionId, { touch: false });
++      redirect("/agenda");
++    } catch {
++      // stale or invalid cookie — fall through to login
++    }
+   }
+   redirect("/login");
+ }
+diff --git a/src/lib/auth/session.ts b/src/lib/auth/session.ts
+index 8a45461..90bad7d 100644
+--- a/src/lib/auth/session.ts
++++ b/src/lib/auth/session.ts
+@@ -1,57 +1,38 @@
+-import { getIronSession, SessionOptions } from "iron-session";
+-import { cookies } from "next/headers";
+ import { redirect } from "next/navigation";
+ import { RolUsuario } from "@prisma/client";
+-
+-export interface SessionData {
+-  userId: string;
+-  empresaId: string;
+-  email: string;
+-  nombre: string;
+-  rol: RolUsuario;
+-  isLoggedIn: boolean;
+-}
+-
+-export const defaultSession: SessionData = {
+-  userId: "",
+-  empresaId: "",
+-  email: "",
+-  nombre: "",
+-  rol: RolUsuario.empleado,
+-  isLoggedIn: false,
+-};
+-
+-const sessionOptions: SessionOptions = {
+-  password: process.env.SESSION_SECRET!,
+-  cookieName: "montironi_session",
+-  cookieOptions: {
+-    secure: process.env.NODE_ENV === "production",
+-    httpOnly: true,
+-    sameSite: "lax",
+-    maxAge: 60 * 60 * 24 * 7,
+-  },
+-};
++import {
++  clearCookieSession,
++  getCookieSession,
++  readCookieSessionId,
++  sessionOptions,
++  validateServerSession,
++  type AuthSession,
++} from "@/lib/auth/session/index";
++
++export type { AuthSession as SessionData } from "@/lib/auth/session/index";
++export { sessionOptions };
+ 
+ export async function getSession() {
+-  const cookieStore = await cookies();
+-  return getIronSession<SessionData>(cookieStore, sessionOptions);
++  return getCookieSession();
+ }
+ 
+-export async function requireSession(): Promise<
+-  Required<Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">> & {
+-    isLoggedIn: true;
++async function resolveAuthSession(): Promise<AuthSession> {
++  const sessionId = await readCookieSessionId();
++  if (!sessionId) {
++    throw new Error("UNAUTHORIZED");
+   }
+-> {
+-  const session = await getSession();
+-  if (!session.isLoggedIn || !session.userId || !session.empresaId) {
++  try {
++    return await validateServerSession(sessionId);
++  } catch {
+     throw new Error("UNAUTHORIZED");
+   }
+-  return session as Required<
+-    Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">
+-  > & { isLoggedIn: true };
+ }
+ 
+-export async function requireAdmin() {
++export async function requireSession(): Promise<AuthSession> {
++  return resolveAuthSession();
++}
++
++export async function requireAdmin(): Promise<AuthSession> {
+   const session = await requireSession();
+   if (session.rol !== RolUsuario.admin) {
+     throw new Error("FORBIDDEN");
+@@ -59,14 +40,14 @@ export async function requireAdmin() {
+   return session;
+ }
+ 
+-export async function getAuthSession() {
+-  const session = await getSession();
+-  if (!session.isLoggedIn || !session.userId || !session.empresaId) {
++export async function getAuthSession(): Promise<AuthSession> {
++  try {
++    return await resolveAuthSession();
++  } catch {
+     redirect("/login");
+   }
+-  return session as Required<
+-    Pick<SessionData, "userId" | "empresaId" | "email" | "nombre" | "rol">
+-  > & { isLoggedIn: true };
+ }
+ 
+-export { sessionOptions };
++export async function destroyClientSession() {
++  await clearCookieSession();
++}
+diff --git a/src/lib/auth/session/constants.ts b/src/lib/auth/session/constants.ts
+new file mode 100644
+index 0000000..925f79b
+--- /dev/null
++++ b/src/lib/auth/session/constants.ts
+@@ -0,0 +1,8 @@
++/** Absolute session lifetime from creation (12 hours). */
++export const SESSION_ABSOLUTE_TTL_MS = 12 * 60 * 60 * 1000;
++
++/** Sliding idle timeout; extended on each authenticated request (45 minutes). */
++export const SESSION_IDLE_TIMEOUT_MS = 45 * 60 * 1000;
++
++/** Iron-session cookie max-age (7 days) — only carries opaque sessionId. */
++export const SESSION_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 7;
+diff --git a/src/lib/auth/session/cookie.ts b/src/lib/auth/session/cookie.ts
+new file mode 100644
+index 0000000..65625d2
+--- /dev/null
++++ b/src/lib/auth/session/cookie.ts
+@@ -0,0 +1,36 @@
++import { getIronSession, type SessionOptions } from "iron-session";
++import { cookies } from "next/headers";
++import { SESSION_COOKIE_MAX_AGE_SEC } from "./constants";
++import type { CookieSessionData } from "./types";
++
++export const sessionOptions: SessionOptions = {
++  password: process.env.SESSION_SECRET!,
++  cookieName: "montironi_session",
++  cookieOptions: {
++    secure: process.env.NODE_ENV === "production",
++    httpOnly: true,
++    sameSite: "lax",
++    maxAge: SESSION_COOKIE_MAX_AGE_SEC,
++  },
++};
++
++export async function getCookieSession() {
++  const cookieStore = await cookies();
++  return getIronSession<CookieSessionData>(cookieStore, sessionOptions);
++}
++
++export async function setCookieSessionId(sessionId: string) {
++  const cookie = await getCookieSession();
++  cookie.sessionId = sessionId;
++  await cookie.save();
++}
++
++export async function clearCookieSession() {
++  const cookie = await getCookieSession();
++  cookie.destroy();
++}
++
++export async function readCookieSessionId(): Promise<string | null> {
++  const cookie = await getCookieSession();
++  return cookie.sessionId ?? null;
++}
+diff --git a/src/lib/auth/session/create-session.use-case.ts b/src/lib/auth/session/create-session.use-case.ts
+new file mode 100644
+index 0000000..400f7cc
+--- /dev/null
++++ b/src/lib/auth/session/create-session.use-case.ts
+@@ -0,0 +1,18 @@
++import { SESSION_ABSOLUTE_TTL_MS } from "./constants";
++import type { CreateSessionInput } from "./types";
++import { insertSesion } from "./repository";
++
++export async function createServerSession(input: CreateSessionInput) {
++  const now = new Date();
++  const expiresAt = new Date(now.getTime() + SESSION_ABSOLUTE_TTL_MS);
++
++  const sesion = await insertSesion({
++    usuarioId: input.usuarioId,
++    empresaId: input.empresaId,
++    expiresAt,
++    userAgent: input.userAgent ?? null,
++    ip: input.ip ?? null,
++  });
++
++  return { sessionId: sesion.id, expiresAt };
++}
+diff --git a/src/lib/auth/session/index.ts b/src/lib/auth/session/index.ts
+new file mode 100644
+index 0000000..d4b02bd
+--- /dev/null
++++ b/src/lib/auth/session/index.ts
+@@ -0,0 +1,18 @@
++export { SESSION_ABSOLUTE_TTL_MS, SESSION_IDLE_TIMEOUT_MS } from "./constants";
++export type { AuthSession, CookieSessionData, CreateSessionInput } from "./types";
++export { createServerSession } from "./create-session.use-case";
++export { validateServerSession, SessionInvalidError } from "./validate-session.use-case";
++export {
++  revokeServerSession,
++  revokeAllUserSessions,
++  revokeSessionsOnUserDeactivated,
++  revokeSessionsOnPasswordChange,
++  revokeSessionsOnRoleChange,
++} from "./revoke-session.use-case";
++export {
++  getCookieSession,
++  setCookieSessionId,
++  clearCookieSession,
++  readCookieSessionId,
++  sessionOptions,
++} from "./cookie";
+diff --git a/src/lib/auth/session/repository.ts b/src/lib/auth/session/repository.ts
+new file mode 100644
+index 0000000..e671928
+--- /dev/null
++++ b/src/lib/auth/session/repository.ts
+@@ -0,0 +1,55 @@
++import type { Prisma } from "@prisma/client";
++import prisma from "@/lib/db";
++
++export type SesionWithUsuario = Prisma.SesionGetPayload<{
++  include: { usuario: true };
++}>;
++
++export async function findSesionById(id: string): Promise<SesionWithUsuario | null> {
++  return prisma.sesion.findUnique({
++    where: { id },
++    include: { usuario: true },
++  });
++}
++
++export async function insertSesion(data: {
++  usuarioId: string;
++  empresaId: string;
++  expiresAt: Date;
++  userAgent?: string | null;
++  ip?: string | null;
++}) {
++  return prisma.sesion.create({ data });
++}
++
++export async function touchSesionLastSeen(id: string, at: Date) {
++  return prisma.sesion.update({
++    where: { id },
++    data: { lastSeenAt: at },
++  });
++}
++
++export async function revokeSesionById(id: string, at: Date) {
++  return prisma.sesion.updateMany({
++    where: { id, revokedAt: null },
++    data: { revokedAt: at },
++  });
++}
++
++export async function revokeAllSesionesForUsuario(usuarioId: string, at: Date) {
++  return prisma.sesion.updateMany({
++    where: { usuarioId, revokedAt: null },
++    data: { revokedAt: at },
++  });
++}
++
++export async function deleteExpiredSesiones(before: Date) {
++  return prisma.sesion.deleteMany({
++    where: {
++      OR: [
++        { expiresAt: { lt: before } },
++        { revokedAt: { lt: before } },
++      ],
++    },
++  });
++}
+diff --git a/src/lib/auth/session/revoke-session.use-case.ts b/src/lib/auth/session/revoke-session.use-case.ts
+new file mode 100644
+index 0000000..2d45610
+--- /dev/null
++++ b/src/lib/auth/session/revoke-session.use-case.ts
+@@ -0,0 +1,27 @@
++import { revokeAllSesionesForUsuario, revokeSesionById } from "./repository";
++
++export async function revokeServerSession(sessionId: string) {
++  const now = new Date();
++  await revokeSesionById(sessionId, now);
++}
++
++export async function revokeAllUserSessions(usuarioId: string) {
++  const now = new Date();
++  const result = await revokeAllSesionesForUsuario(usuarioId, now);
++  return result.count;
++}
++
++/** Call when usuario.activo is set to false. */
++export async function revokeSessionsOnUserDeactivated(usuarioId: string) {
++  return revokeAllUserSessions(usuarioId);
++}
++
++/** Call when usuario password hash changes. */
++export async function revokeSessionsOnPasswordChange(usuarioId: string) {
++  return revokeAllUserSessions(usuarioId);
++}
++
++/** Call when usuario.rol changes. */
++export async function revokeSessionsOnRoleChange(usuarioId: string) {
++  return revokeAllUserSessions(usuarioId);
++}
+diff --git a/src/lib/auth/session/types.ts b/src/lib/auth/session/types.ts
+new file mode 100644
+index 0000000..a1db0a2
+--- /dev/null
++++ b/src/lib/auth/session/types.ts
+@@ -0,0 +1,31 @@
++import type { RolUsuario } from "@prisma/client";
++
++/** Encrypted iron-session cookie payload — opaque session id only. */
++export interface CookieSessionData {
++  sessionId?: string;
++}
++
++/** Resolved authenticated session loaded from DB (source of truth for rol/tenancy). */
++export interface AuthSession {
++  sessionId: string;
++  userId: string;
++  empresaId: string;
++  email: string;
++  nombre: string;
++  rol: RolUsuario;
++  isLoggedIn: true;
++}
++
++export interface CreateSessionInput {
++  usuarioId: string;
++  empresaId: string;
++  userAgent?: string | null;
++  ip?: string | null;
++}
++
++export interface ValidateSessionOptions {
++  /** Update lastSeenAt on successful validation (sliding idle). Default true. */
++  touch?: boolean;
++  /** Revoke session row when expired/idle/revoked on read. Default true. */
++  revokeOnFailure?: boolean;
++}
+diff --git a/src/lib/auth/session/validate-session.use-case.ts b/src/lib/auth/session/validate-session.use-case.ts
+new file mode 100644
+index 0000000..7281a98
+--- /dev/null
++++ b/src/lib/auth/session/validate-session.use-case.ts
+@@ -0,0 +1,67 @@
++import { SESSION_IDLE_TIMEOUT_MS } from "./constants";
++import type { AuthSession, ValidateSessionOptions } from "./types";
++import { findSesionById, revokeSesionById, touchSesionLastSeen } from "./repository";
++
++export class SessionInvalidError extends Error {
++  constructor(message = "UNAUTHORIZED") {
++    super(message);
++    this.name = "SessionInvalidError";
++  }
++}
++
++function isIdleExpired(lastSeenAt: Date, now: Date): boolean {
++  return now.getTime() - lastSeenAt.getTime() >= SESSION_IDLE_TIMEOUT_MS;
++}
++
++function isAbsoluteExpired(expiresAt: Date, now: Date): boolean {
++  return now.getTime() >= expiresAt.getTime();
++}
++
++export async function validateServerSession(
++  sessionId: string,
++  options: ValidateSessionOptions = {}
++): Promise<AuthSession> {
++  const { touch = true, revokeOnFailure = true } = options;
++  const now = new Date();
++
++  const sesion = await findSesionById(sessionId);
++  if (!sesion) {
++    throw new SessionInvalidError();
++  }
++
++  const failureReason =
++    sesion.revokedAt !== null
++      ? "revoked"
++      : isAbsoluteExpired(sesion.expiresAt, now)
++        ? "absolute_ttl"
++        : isIdleExpired(sesion.lastSeenAt, now)
++          ? "idle"
++          : !sesion.usuario.activo
++            ? "usuario_inactivo"
++            : sesion.usuario.empresaId !== sesion.empresaId
++              ? "tenancy_mismatch"
++              : null;
++
++  if (failureReason) {
++    if (revokeOnFailure && sesion.revokedAt === null) {
++      await revokeSesionById(sessionId, now);
++    }
++    throw new SessionInvalidError();
++  }
++
++  if (touch) {
++    await touchSesionLastSeen(sessionId, now);
++  }
++
++  const { usuario } = sesion;
++
++  return {
++    sessionId: sesion.id,
++    userId: usuario.id,
++    empresaId: usuario.empresaId,
++    email: usuario.email,
++    nombre: usuario.nombre,
++    rol: usuario.rol,
++    isLoggedIn: true,
++  };
++}
+diff --git a/src/lib/modules/auth/actions.ts b/src/lib/modules/auth/actions.ts
+index a2b80a3..36cb315 100644
+--- a/src/lib/modules/auth/actions.ts
++++ b/src/lib/modules/auth/actions.ts
+@@ -1,10 +1,24 @@
+ "use server";
+ 
++import { headers } from "next/headers";
+ import { redirect } from "next/navigation";
+ import prisma from "@/lib/db";
+-import { getSession } from "@/lib/auth/session";
++import { destroyClientSession } from "@/lib/auth/session";
++import {
++  createServerSession,
++  revokeServerSession,
++  setCookieSessionId,
++  readCookieSessionId,
++} from "@/lib/auth/session/index";
+ import { verifyPassword, hashPassword } from "@/lib/auth/password";
+ 
++function extractClientMetadata(headerStore: Headers) {
++  const userAgent = headerStore.get("user-agent");
++  const forwarded = headerStore.get("x-forwarded-for");
++  const ip = forwarded?.split(",")[0]?.trim() ?? headerStore.get("x-real-ip") ?? null;
++  return { userAgent, ip };
++}
++
+ export async function loginAction(formData: FormData) {
+   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+   const password = String(formData.get("password") ?? "");
+@@ -22,21 +36,33 @@ export async function loginAction(formData: FormData) {
+     return { error: "Credenciales inválidas" };
+   }
+ 
+-  const session = await getSession();
+-  session.userId = usuario.id;
+-  session.empresaId = usuario.empresaId;
+-  session.email = usuario.email;
+-  session.nombre = usuario.nombre;
+-  session.rol = usuario.rol;
+-  session.isLoggedIn = true;
+-  await session.save();
++  const headerStore = await headers();
++  const { userAgent, ip } = extractClientMetadata(headerStore);
++
++  // Anti-fixation: always issue a fresh sessionId; never reuse an existing row/cookie.
++  const priorSessionId = await readCookieSessionId();
++  if (priorSessionId) {
++    await revokeServerSession(priorSessionId);
++  }
++  await destroyClientSession();
+ 
++  const { sessionId } = await createServerSession({
++    usuarioId: usuario.id,
++    empresaId: usuario.empresaId,
++    userAgent,
++    ip,
++  });
++
++  await setCookieSessionId(sessionId);
+   redirect("/agenda");
+ }
+ 
+ export async function logoutAction() {
+-  const session = await getSession();
+-  session.destroy();
++  const sessionId = await readCookieSessionId();
++  if (sessionId) {
++    await revokeServerSession(sessionId);
++  }
++  await destroyClientSession();
+   redirect("/login");
+ }
+ 
+diff --git a/tests/helpers/fixture.ts b/tests/helpers/fixture.ts
+index caa0c5d..05a53d8 100644
+--- a/tests/helpers/fixture.ts
++++ b/tests/helpers/fixture.ts
+@@ -129,6 +129,7 @@ export async function createTestFixture(suffix = Date.now().toString()): Promise
+ }
+ 
+ export async function destroyTestFixture(empresaId: string) {
++  await prisma.sesion.deleteMany({ where: { empresaId } });
+   await prisma.wahMessage.deleteMany({ where: { empresaId } });
+   await prisma.wahConversation.deleteMany({ where: { empresaId } });
+   await prisma.wahMedia.deleteMany({ where: { empresaId } });
+diff --git a/tests/helpers/session.ts b/tests/helpers/session.ts
+new file mode 100644
+index 0000000..d29aac7
+--- /dev/null
++++ b/tests/helpers/session.ts
+@@ -0,0 +1,53 @@
++import { sealData } from "iron-session";
++import { RolUsuario } from "@prisma/client";
++import { hashPassword } from "@/lib/auth/password";
++import { sessionOptions } from "@/lib/auth/session/index";
++import { createServerSession } from "@/lib/auth/session/create-session.use-case";
++import { cookieStore } from "../setup";
++import { prisma } from "./fixture";
++
++export async function createTestUsuario(
++  empresaId: string,
++  suffix: string,
++  rol: RolUsuario = RolUsuario.empleado
++) {
++  const passwordHash = await hashPassword("testpass123");
++  return prisma.usuario.create({
++    data: {
++      empresaId,
++      email: `session-${suffix}@example.com`,
++      nombre: `Session User ${suffix}`,
++      passwordHash,
++      rol,
++      activo: true,
++    },
++  });
++}
++
++export async function createTestServerSession(
++  usuarioId: string,
++  empresaId: string,
++  metadata?: { userAgent?: string; ip?: string }
++) {
++  return createServerSession({
++    usuarioId,
++    empresaId,
++    userAgent: metadata?.userAgent ?? "vitest",
++    ip: metadata?.ip ?? "127.0.0.1",
++  });
++}
++
++export async function bindSessionCookie(sessionId: string) {
++  const sealed = await sealData({ sessionId }, sessionOptions);
++  cookieStore.set(sessionOptions.cookieName, sealed);
++}
++
++export function clearSessionCookie() {
++  cookieStore.clear();
++}
++
++export async function seedAuthenticatedCookie(usuarioId: string, empresaId: string) {
++  const { sessionId } = await createTestServerSession(usuarioId, empresaId);
++  await bindSessionCookie(sessionId);
++  return sessionId;
++}
+diff --git a/tests/integration/session.test.ts b/tests/integration/session.test.ts
+new file mode 100644
+index 0000000..33252b2
+--- /dev/null
++++ b/tests/integration/session.test.ts
+@@ -0,0 +1,205 @@
++import { NextRequest } from "next/server";
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { RolUsuario } from "@prisma/client";
++import { subMinutes } from "date-fns";
++import { GET as getClienteContext } from "@/app/api/v1/clientes/context/route";
++import { POST as vencerPendientesJob } from "@/app/api/v1/jobs/vencer-pendientes/route";
++import { validateServerSession } from "@/lib/auth/session/validate-session.use-case";
++import { revokeServerSession } from "@/lib/auth/session/revoke-session.use-case";
++import { SESSION_IDLE_TIMEOUT_MS } from "@/lib/auth/session/constants";
++import {
++  createTestFixture,
++  destroyTestFixture,
++  prisma,
++  type TestFixture,
++} from "../helpers/fixture";
++import {
++  bindSessionCookie,
++  clearSessionCookie,
++  createTestServerSession,
++  createTestUsuario,
++  seedAuthenticatedCookie,
++} from "../helpers/session";
++
++function protectedApiRequest() {
++  return new NextRequest("http://localhost/api/v1/clientes/context?telefono=+5491100000000");
++}
++
++describe("Server-side sessions (B1+B2)", () => {
++  let fx: TestFixture;
++
++  beforeAll(async () => {
++    process.env.SESSION_SECRET =
++      process.env.SESSION_SECRET ?? "test-session-secret-at-least-32-chars-long";
++    fx = await createTestFixture(`session-${Date.now()}`);
++  });
++
++  afterAll(async () => {
++    clearSessionCookie();
++    await destroyTestFixture(fx.empresaId);
++    await prisma.$disconnect();
++  });
++
++  beforeEach(() => {
++    clearSessionCookie();
++  });
++
++  it("deactivate mid-session → 401 on protected API", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `deact-${Date.now()}`);
++    const sessionId = await seedAuthenticatedCookie(usuario.id, fx.empresaId);
++
++    await prisma.usuario.update({
++      where: { id: usuario.id },
++      data: { activo: false },
++    });
++
++    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
++
++    const response = await getClienteContext(protectedApiRequest());
++    expect(response.status).toBe(401);
++  });
++
++  it("demote admin→empleado → 403 on admin API (rol from DB)", async () => {
++    const admin = await createTestUsuario(
++      fx.empresaId,
++      `demote-${Date.now()}`,
++      RolUsuario.admin
++    );
++    await seedAuthenticatedCookie(admin.id, fx.empresaId);
++
++    await prisma.usuario.update({
++      where: { id: admin.id },
++      data: { rol: RolUsuario.empleado },
++    });
++
++    const response = await vencerPendientesJob(
++      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", { method: "POST" })
++    );
++    expect(response.status).toBe(403);
++  });
++
++  it("logout replay → 401 after revoke", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `logout-${Date.now()}`);
++    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
++    await bindSessionCookie(sessionId);
++
++    await revokeServerSession(sessionId);
++
++    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
++
++    const response = await getClienteContext(protectedApiRequest());
++    expect(response.status).toBe(401);
++  });
++
++  it("idle timeout → 401", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `idle-${Date.now()}`);
++    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
++
++    const idleCutoff = subMinutes(
++      new Date(),
++      Math.ceil(SESSION_IDLE_TIMEOUT_MS / 60_000) + 1
++    );
++    await prisma.sesion.update({
++      where: { id: sessionId },
++      data: { lastSeenAt: idleCutoff },
++    });
++
++    await bindSessionCookie(sessionId);
++
++    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
++
++    const response = await getClienteContext(protectedApiRequest());
++    expect(response.status).toBe(401);
++
++    const row = await prisma.sesion.findUnique({ where: { id: sessionId } });
++    expect(row?.revokedAt).not.toBeNull();
++  });
++
++  it("absolute TTL → 401", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `ttl-${Date.now()}`);
++    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
++
++    await prisma.sesion.update({
++      where: { id: sessionId },
++      data: { expiresAt: subMinutes(new Date(), 1) },
++    });
++
++    await bindSessionCookie(sessionId);
++
++    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
++
++    const response = await getClienteContext(protectedApiRequest());
++    expect(response.status).toBe(401);
++  });
++
++  it("login anti-fixation: always new sessionId, prior session revoked", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `fixation-${Date.now()}`);
++
++    const first = await createTestServerSession(usuario.id, fx.empresaId);
++    await bindSessionCookie(first.sessionId);
++
++    const priorSessionId = first.sessionId;
++    await revokeServerSession(priorSessionId);
++    clearSessionCookie();
++
++    const second = await createTestServerSession(usuario.id, fx.empresaId);
++    await bindSessionCookie(second.sessionId);
++
++    expect(second.sessionId).not.toBe(priorSessionId);
++
++    const priorRow = await prisma.sesion.findUnique({ where: { id: priorSessionId } });
++    expect(priorRow?.revokedAt).not.toBeNull();
++
++    const session = await validateServerSession(second.sessionId);
++    expect(session.userId).toBe(usuario.id);
++  });
++
++  it("tenancy mismatch (stale sesion.empresaId) → 401 and revoke", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `tenancy-${Date.now()}`);
++    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
++
++    const otherEmpresa = await prisma.empresa.create({
++      data: { nombre: "Other Co", slug: `other-${Date.now()}` },
++    });
++
++    await prisma.sesion.update({
++      where: { id: sessionId },
++      data: { empresaId: otherEmpresa.id },
++    });
++
++    await expect(validateServerSession(sessionId)).rejects.toThrow("UNAUTHORIZED");
++
++    const row = await prisma.sesion.findUnique({ where: { id: sessionId } });
++    expect(row?.revokedAt).not.toBeNull();
++
++    await prisma.sesion.deleteMany({ where: { empresaId: otherEmpresa.id } });
++    await prisma.empresa.delete({ where: { id: otherEmpresa.id } });
++  });
++
++  it("resolved empresaId comes from usuario, not stale sesion row", async () => {
++    const usuario = await createTestUsuario(fx.empresaId, `empresa-src-${Date.now()}`);
++    const { sessionId } = await createTestServerSession(usuario.id, fx.empresaId);
++
++    const session = await validateServerSession(sessionId);
++    expect(session.empresaId).toBe(usuario.empresaId);
++    expect(session.empresaId).toBe(fx.empresaId);
++  });
++
++  it("AGENT_API_KEY flow remains independent of cookie session", async () => {
++    const apiKey = process.env.AGENT_API_KEY ?? "montironi-agent-api-key-dev";
++    process.env.AGENT_API_KEY = apiKey;
++
++    const response = await vencerPendientesJob(
++      new NextRequest("http://localhost/api/v1/jobs/vencer-pendientes", {
++        method: "POST",
++        headers: {
++          "x-api-key": apiKey,
++          "x-empresa": fx.empresaSlug,
++        },
++      })
++    );
++
++    expect(response.status).toBe(200);
++    expect(await response.json()).toMatchObject({ vencidos: expect.any(Number) });
++  });
++});
+diff --git a/tests/integration/wah.test.ts b/tests/integration/wah.test.ts
+index 7f95a44..534162c 100644
+--- a/tests/integration/wah.test.ts
++++ b/tests/integration/wah.test.ts
+@@ -159,6 +159,7 @@ describe("WAH · Comunicaciones (Emi contract)", () => {
+     });
+ 
+     vi.spyOn(wahScope, "requireWahSession").mockResolvedValue({
++      sessionId: "test-session-id",
+       userId: fx.userId!,
+       empresaId: fx.empresaId,
+       email: "test@test.com",
+diff --git a/tests/setup.ts b/tests/setup.ts
+new file mode 100644
+index 0000000..0127c8c
+--- /dev/null
++++ b/tests/setup.ts
+@@ -0,0 +1,26 @@
++import { vi } from "vitest";
++import dotenv from "dotenv";
++
++dotenv.config();
++
++export const cookieStore = new Map<string, string>();
++
++vi.mock("next/headers", () => ({
++  cookies: vi.fn(async () => ({
++    get: (name: string) => {
++      const value = cookieStore.get(name);
++      return value !== undefined ? { name, value } : undefined;
++    },
++    set: (nameOrOpts: string | { name: string; value: string }, value?: string) => {
++      if (typeof nameOrOpts === "string") {
++        cookieStore.set(nameOrOpts, value!);
++      } else {
++        cookieStore.set(nameOrOpts.name, nameOrOpts.value);
++      }
++    },
++    delete: (name: string) => {
++      cookieStore.delete(name);
++    },
++  })),
++  headers: vi.fn(async () => new Headers()),
++}));
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 87e0d82..fcb9329 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -5,6 +5,7 @@ export default defineConfig({
+   test: {
+     environment: "node",
+     globals: true,
++    setupFiles: ["./tests/setup.ts"],
+   },
+   resolve: {
+     alias: {

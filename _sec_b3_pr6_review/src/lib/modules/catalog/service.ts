@@ -1,34 +1,10 @@
 import prisma from "@/lib/db";
 import { DomainError } from "@/lib/modules/appointments/errors";
-import {
-  ensureTallerOfreceCatalogoEmpresa,
-  offerServicioInEmpresa,
-} from "@/lib/modules/catalog/oferta";
 
 export async function listServicios(empresaId: string) {
   return prisma.servicio.findMany({
     where: { empresaId, activo: true },
     include: { tipoServicio: true },
-    orderBy: [{ tipoServicio: { nombre: "asc" } }, { nombre: "asc" }],
-  });
-}
-
-/** Catálogo de panel: servicios + intervalos km. No usar en `/api/agents`. */
-export async function listServiciosConIntervalos(empresaId: string) {
-  return prisma.servicio.findMany({
-    where: { empresaId, activo: true },
-    include: {
-      tipoServicio: { select: { nombre: true } },
-      intervalosKm: {
-        select: {
-          id: true,
-          tipoVehiculo: true,
-          condicion: true,
-          intervaloKm: true,
-        },
-        orderBy: [{ tipoVehiculo: "asc" }, { condicion: "asc" }],
-      },
-    },
     orderBy: [{ tipoServicio: { nombre: "asc" } }, { nombre: "asc" }],
   });
 }
@@ -70,14 +46,7 @@ export async function getTaller(id: string, empresaId: string) {
   });
 }
 
-export async function getConfiguracionTaller(tallerId: string, empresaId: string) {
-  const taller = await prisma.taller.findFirst({
-    where: { id: tallerId, empresaId },
-    select: { id: true },
-  });
-  if (!taller) {
-    throw new DomainError("Taller no encontrado", "RecursoNoEncontrado");
-  }
+export async function getConfiguracionTaller(tallerId: string) {
   return prisma.configuracionTurnos.findUnique({ where: { tallerId } });
 }
 
@@ -116,20 +85,16 @@ export async function createServicio(params: {
     throw new DomainError("Tipo de servicio no encontrado", "RecursoNoEncontrado");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const servicio = await tx.servicio.create({
-      data: {
-        empresaId: params.empresaId,
-        tipoServicioId: params.tipoServicioId,
-        nombre: params.nombre,
-        descripcion: params.descripcion,
-        duracionMin: params.duracionMin,
-        precio: params.precio,
-        modoPrecio: params.modoPrecio ?? "fijo",
-      },
-    });
-    await offerServicioInEmpresa(tx, params.empresaId, servicio.id);
-    return servicio;
+  return prisma.servicio.create({
+    data: {
+      empresaId: params.empresaId,
+      tipoServicioId: params.tipoServicioId,
+      nombre: params.nombre,
+      descripcion: params.descripcion,
+      duracionMin: params.duracionMin,
+      precio: params.precio,
+      modoPrecio: params.modoPrecio ?? "fijo",
+    },
   });
 }
 
@@ -152,8 +117,6 @@ export async function updateServicio(
 }
 
 export async function serviciosForTaller(tallerId: string, empresaId: string) {
-  await ensureTallerOfreceCatalogoEmpresa(tallerId, empresaId);
-
   return prisma.servicio.findMany({
     where: {
       empresaId,

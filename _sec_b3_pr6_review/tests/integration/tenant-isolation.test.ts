@@ -7,7 +7,6 @@ import {
   createServicio,
   updateConfiguracionTaller,
 } from "@/lib/modules/catalog/service";
-import { upsertIntervaloKm } from "@/lib/modules/catalog/intervalo.service";
 import {
   createTestFixture,
   destroyTestFixture,
@@ -150,32 +149,5 @@ describe("B3 · Aislamiento multi-tenant (IDOR)", () => {
       },
     });
     expect(crossRef).toBeNull();
-  });
-
-  it("getConfiguracionTaller — empresa B no puede leer config de taller de A", async () => {
-    const { getConfiguracionTaller } = await import("@/lib/modules/catalog/service");
-    await expect(
-      getConfiguracionTaller(empresaA.tallerId, empresaB.empresaId)
-    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
-
-    const own = await getConfiguracionTaller(empresaA.tallerId, empresaA.empresaId);
-    expect(own === null || own.tallerId === empresaA.tallerId).toBe(true);
-  });
-
-  it("upsertIntervaloKm — empresa B no puede escribir intervalo de un servicio de A", async () => {
-    await expect(
-      upsertIntervaloKm({
-        servicioId: empresaA.servicioId,
-        empresaId: empresaB.empresaId,
-        tipoVehiculo: "auto",
-        condicion: "nuevo",
-        intervaloKm: 9999,
-      })
-    ).rejects.toMatchObject({ code: "RecursoNoEncontrado" });
-
-    const leaked = await prisma.servicioIntervaloKm.findFirst({
-      where: { servicioId: empresaA.servicioId },
-    });
-    expect(leaked).toBeNull();
   });
 });

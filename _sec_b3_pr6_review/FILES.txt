@@ -1,0 +1,7 @@
+docs/SECURITY_TENANT_ISOLATION.md
+src/lib/modules/appointments/actions.ts
+src/lib/modules/appointments/service.ts
+src/lib/modules/catalog/service.ts
+src/lib/modules/customers/service.ts
+tests/helpers/fixture.ts
+tests/integration/tenant-isolation.test.ts

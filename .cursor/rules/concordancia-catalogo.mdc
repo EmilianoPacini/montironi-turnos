@@ -1,0 +1,25 @@
+---
+description: Alta/edición/baja de dominio debe verse en todas las pantallas y APIs que lo consultan.
+alwaysApply: true
+---
+
+# Concordancia de catálogo y agenda
+
+Si se crea, modifica o elimina un dato de negocio, **todas** las lecturas (panel, disponibilidad, agents API) tienen que ver el mismo estado. No alcanza con que exista la fila en una sola tabla.
+
+## Servicios (V1)
+
+Un servicio de la empresa se ofrece en **todos** los talleres y bahías activos (`taller_servicio` + `bahia_servicio`), igual que el seed.
+
+```ts
+// ❌ BAD — solo inserta `servicio`. Nuevo turno filtra por tallerServicio y no lo lista.
+await prisma.servicio.create({ data: { empresaId, nombre, ... } });
+revalidatePath("/servicios");
+
+// ✅ GOOD
+const servicio = await createServicio({ empresaId, ... }); // oferta en talleres/bahías
+revalidateDomainSurfaces([], "catalogo"); // /servicios, /turnos/nuevo, /agenda, /bahias
+```
+
+- Tras un write, usar `revalidateDomainSurfaces` del alcance correcto (`catalogo` | `agenda` | `clientes`).
+- No cachear catálogo en estado de cliente como fuente de verdad.

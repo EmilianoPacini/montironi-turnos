@@ -1,10 +1,23 @@
 import prisma from "@/lib/db";
 import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
+import { DomainError } from "@/lib/modules/appointments/errors";
 
 export async function listIntervalosServicio(servicioId: string, empresaId: string) {
   return prisma.servicioIntervaloKm.findMany({
     where: { servicioId, servicio: { empresaId } },
     orderBy: [{ tipoVehiculo: "asc" }, { condicion: "asc" }],
+  });
+}
+
+export async function listIntervalosKm(empresaId: string) {
+  return prisma.servicioIntervaloKm.findMany({
+    where: { servicio: { empresaId } },
+    include: { servicio: { select: { id: true, nombre: true } } },
+    orderBy: [
+      { servicio: { nombre: "asc" } },
+      { tipoVehiculo: "asc" },
+      { condicion: "asc" },
+    ],
   });
 }
 
@@ -18,7 +31,9 @@ export async function upsertIntervaloKm(params: {
   const servicio = await prisma.servicio.findFirst({
     where: { id: params.servicioId, empresaId: params.empresaId },
   });
-  if (!servicio) throw new Error("NOT_FOUND");
+  if (!servicio) {
+    throw new DomainError("Servicio no encontrado", "RecursoNoEncontrado");
+  }
 
   return prisma.servicioIntervaloKm.upsert({
     where: {
@@ -30,11 +45,15 @@ export async function upsertIntervaloKm(params: {
     },
     create: {
       servicioId: params.servicioId,
+      empresaId: params.empresaId,
       tipoVehiculo: params.tipoVehiculo,
       condicion: params.condicion,
       intervaloKm: params.intervaloKm,
     },
-    update: { intervaloKm: params.intervaloKm },
+    update: {
+      intervaloKm: params.intervaloKm,
+      empresaId: params.empresaId,
+    },
   });
 }
 

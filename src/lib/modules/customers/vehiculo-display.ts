@@ -2,10 +2,10 @@ import prisma from "@/lib/db";
 import { TipoVehiculo, Vehiculo } from "@prisma/client";
 import { calcularProximoServicioKm } from "@/lib/modules/catalog/intervalo.service";
 
-export const TIPO_VEHICULO_LABELS: Record<TipoVehiculo, string> = {
-  auto: "Auto",
-  camioneta: "Camioneta",
-};
+export {
+  CONDICION_VEHICULO_LABELS,
+  TIPO_VEHICULO_LABELS,
+} from "@/lib/modules/customers/vehiculo-labels";
 
 export type VehiculoEnriquecido = {
   clienteVehiculoId: string;

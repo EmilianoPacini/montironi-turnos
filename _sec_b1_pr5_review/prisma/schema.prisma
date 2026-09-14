@@ -1,0 +1,621 @@
+// Montironi Turnos — authoritative PostgreSQL schema (Prisma mapping)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolUsuario {
+  admin
+  operador
+  asesor
+  empleado
+
+  @@map("rol_usuario")
+}
+
+enum EstadoTurno {
+  pendiente
+  confirmado
+  recibido
+  en_servicio
+  finalizado
+  cancelado
+  ausente
+  vencido
+
+  @@map("estado_turno")
+}
+
+enum EstadoCalendario {
+  disponible
+  bloqueado
+  cerrado
+
+  @@map("estado_calendario")
+}
+
+enum CanalTurno {
+  web
+  telefono
+  whatsapp
+  interno
+  agente_ia
+
+  @@map("canal_turno")
+}
+
+enum TipoOcupacion {
+  turno
+  bloqueo
+
+  @@map("tipo_ocupacion")
+}
+
+enum DiaSemana {
+  lunes
+  martes
+  miercoles
+  jueves
+  viernes
+  sabado
+  domingo
+
+  @@map("dia_semana")
+}
+
+enum TipoExcepcion {
+  cerrado
+  horario_especial
+
+  @@map("tipo_excepcion")
+}
+
+enum ModoPrecio {
+  fijo
+  desde
+  a_presupuestar
+
+  @@map("modo_precio")
+}
+
+enum TipoVehiculo {
+  auto
+  camioneta
+
+  @@map("tipo_vehiculo")
+}
+
+enum CondicionVehiculo {
+  nuevo
+  normal
+  viejo
+
+  @@map("condicion_vehiculo")
+}
+
+model Empresa {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre    String
+  slug      String   @unique
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  usuarios       Usuario[]
+  talleres       Taller[]
+  tiposServicio  TipoServicio[]
+  servicios      Servicio[]
+  clientes       Cliente[]
+  vehiculos      Vehiculo[]
+  turnos         Turno[]
+  operacionesApi     OperacionApi[]
+  movimientos        Movimiento[]
+  intervalosKm       ServicioIntervaloKm[]
+  whatsappAccounts   WhatsappAccount[]
+  wahConversations   WahConversation[]
+  wahMessages        WahMessage[]
+  wahMedia           WahMedia[]
+  sesiones           Sesion[]
+
+  @@map("empresa")
+}
+
+model Usuario {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId    String     @map("empresa_id") @db.Uuid
+  email        String
+  nombre       String
+  passwordHash String     @map("password_hash")
+  rol          RolUsuario @default(empleado)
+  activo       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa       Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  turnosCreados Turno[]       @relation("TurnoCreador")
+  eventosTurno  EventoTurno[]
+  bloqueosCreados OcupacionBahia[] @relation("BloqueoCreador")
+  movimientos   Movimiento[]
+  wahMessagesSent       WahMessage[]      @relation("WahMessageSender")
+  whatsappAccountsOwned WhatsappAccount[] @relation("WahAccountOwner")
+  sesiones              Sesion[]
+
+  @@unique([empresaId, email])
+  @@map("usuario")
+}
+
+model Sesion {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId  String    @map("usuario_id") @db.Uuid
+  empresaId  String    @map("empresa_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  userAgent  String?   @map("user_agent")
+  ip         String?   @map("ip")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiresAt])
+  @@map("sesion")
+}
+
+model Taller {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  nombre    String
+  direccion String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa         Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  bahias          Bahia[]
+  tallerServicios TallerServicio[]
+  patronesHorario PatronHorario[]
+  excepciones     ExcepcionHorario[]
+  turnos          Turno[]
+  configuracion   ConfiguracionTurnos?
+
+  @@map("taller")
+}
+
+model Bahia {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId  String   @map("taller_id") @db.Uuid
+  nombre    String
+  orden     Int      @default(0)
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  taller         Taller           @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  bahiaServicios BahiaServicio[]
+  ocupaciones    OcupacionBahia[]
+  turnos         Turno[]
+
+  @@map("bahia")
+}
+
+model TipoServicio {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  servicios Servicio[]
+
+  @@map("tipo_servicio")
+}
+
+model Servicio {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId      String     @map("empresa_id") @db.Uuid
+  tipoServicioId String     @map("tipo_servicio_id") @db.Uuid
+  nombre         String
+  descripcion    String?
+  duracionMin    Int        @map("duracion_min")
+  precio         Decimal    @db.Decimal(10, 2)
+  modoPrecio     ModoPrecio @default(fijo) @map("modo_precio")
+  activo         Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipoServicio    TipoServicio     @relation(fields: [tipoServicioId], references: [id])
+  tallerServicios TallerServicio[]
+  bahiaServicios BahiaServicio[]
+  detallesTurno   DetalleTurno[]
+  intervalosKm    ServicioIntervaloKm[]
+
+  @@map("servicio")
+}
+
+model TallerServicio {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId   String  @map("taller_id") @db.Uuid
+  servicioId String  @map("servicio_id") @db.Uuid
+  activo     Boolean @default(true)
+
+  taller   Taller   @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  servicio Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  @@unique([tallerId, servicioId])
+  @@map("taller_servicio")
+}
+
+model BahiaServicio {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bahiaId    String  @map("bahia_id") @db.Uuid
+  servicioId String  @map("servicio_id") @db.Uuid
+  activo     Boolean @default(true)
+
+  bahia    Bahia    @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
+  servicio Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  @@unique([bahiaId, servicioId])
+  @@map("bahia_servicio")
+}
+
+model PatronHorario {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId String    @map("taller_id") @db.Uuid
+  dia      DiaSemana
+  activo   Boolean   @default(true)
+
+  taller  Taller            @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+  franjas FranjaHoraria[]
+
+  @@unique([tallerId, dia])
+  @@map("patron_horario")
+}
+
+model FranjaHoraria {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patronHorarioId String @map("patron_horario_id") @db.Uuid
+  horaInicio      String @map("hora_inicio")
+  horaFin         String @map("hora_fin")
+
+  patronHorario PatronHorario @relation(fields: [patronHorarioId], references: [id], onDelete: Cascade)
+
+  @@map("franja_horaria")
+}
+
+model ExcepcionHorario {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId   String        @map("taller_id") @db.Uuid
+  fecha      DateTime      @db.Date
+  tipo       TipoExcepcion
+  horaInicio String?       @map("hora_inicio")
+  horaFin    String?       @map("hora_fin")
+  motivo     String?
+
+  taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+
+  @@unique([tallerId, fecha])
+  @@map("excepcion_horario")
+}
+
+model ConfiguracionTurnos {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tallerId       String @unique @map("taller_id") @db.Uuid
+  margenMinutos  Int    @default(15) @map("margen_minutos")
+
+  taller Taller @relation(fields: [tallerId], references: [id], onDelete: Cascade)
+
+  @@map("configuracion_turnos")
+}
+
+model Cliente {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  nombre    String
+  apellido  String
+  email     String?
+  telefono  String
+  documento String?
+  notas     String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa    Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  vehiculos  ClienteVehiculo[]
+  documentos       DocumentoCliente[]
+  turnos           Turno[]
+  wahConversations WahConversation[]
+
+  @@index([empresaId, telefono])
+  @@map("cliente")
+}
+
+model Vehiculo {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId         String             @map("empresa_id") @db.Uuid
+  patente           String
+  marca             String?
+  modelo            String?
+  anio              Int?
+  color             String?
+  tipoVehiculo      TipoVehiculo       @default(auto) @map("tipo_vehiculo")
+  condicion         CondicionVehiculo  @default(normal) @map("condicion")
+  kilometrajeActual Int?               @map("kilometraje_actual")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa  Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clientes ClienteVehiculo[]
+  turnos   Turno[]
+
+  @@unique([empresaId, patente])
+  @@map("vehiculo")
+}
+
+model ServicioIntervaloKm {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  servicioId   String            @map("servicio_id") @db.Uuid
+  empresaId    String            @map("empresa_id") @db.Uuid
+  tipoVehiculo TipoVehiculo      @map("tipo_vehiculo")
+  condicion    CondicionVehiculo @map("condicion")
+  intervaloKm  Int               @map("intervalo_km")
+
+  servicio Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  empresa  Empresa  @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@unique([servicioId, tipoVehiculo, condicion])
+  @@index([empresaId], map: "ix_servicio_intervalo_km_empresa")
+  @@map("servicio_intervalo_km")
+}
+
+model ClienteVehiculo {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId   String  @map("cliente_id") @db.Uuid
+  vehiculoId  String  @map("vehiculo_id") @db.Uuid
+  esPrincipal Boolean @default(false) @map("es_principal")
+
+  cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+
+  @@unique([clienteId, vehiculoId])
+  @@map("cliente_vehiculo")
+}
+
+model DocumentoCliente {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clienteId String   @map("cliente_id") @db.Uuid
+  nombre    String
+  url       String?
+  tipo      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("documento_cliente")
+}
+
+model Turno {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String      @map("empresa_id") @db.Uuid
+  tallerId    String      @map("taller_id") @db.Uuid
+  bahiaId     String      @map("bahia_id") @db.Uuid
+  clienteId   String      @map("cliente_id") @db.Uuid
+  vehiculoId  String      @map("vehiculo_id") @db.Uuid
+  creadorId   String?     @map("creador_id") @db.Uuid
+  estado      EstadoTurno @default(pendiente)
+  canal       CanalTurno  @default(interno)
+  inicio      DateTime    @db.Timestamptz(6)
+  finalizaEn  DateTime    @map("finaliza_en") @db.Timestamptz(6)
+  kilometraje Int?        @map("kilometraje")
+  notas       String?
+  version     Int         @default(1)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa     Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  taller      Taller           @relation(fields: [tallerId], references: [id])
+  bahia       Bahia            @relation(fields: [bahiaId], references: [id])
+  cliente     Cliente          @relation(fields: [clienteId], references: [id])
+  vehiculo    Vehiculo         @relation(fields: [vehiculoId], references: [id])
+  creador     Usuario?         @relation("TurnoCreador", fields: [creadorId], references: [id])
+  detalles    DetalleTurno[]
+  ocupaciones OcupacionBahia[]
+  eventos     EventoTurno[]
+
+  @@index([empresaId, inicio])
+  @@index([bahiaId, inicio])
+  @@map("turno")
+}
+
+model DetalleTurno {
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  turnoId            String     @map("turno_id") @db.Uuid
+  servicioId         String     @map("servicio_id") @db.Uuid
+  nombreSnapshot     String     @map("nombre_snapshot")
+  duracionMin        Int        @map("duracion_min")
+  precioSnapshot     Decimal    @map("precio_snapshot") @db.Decimal(10, 2)
+  modoPrecioSnapshot ModoPrecio @default(fijo) @map("modo_precio_snapshot")
+  orden              Int        @default(0)
+
+  turno    Turno    @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+  servicio Servicio @relation(fields: [servicioId], references: [id])
+
+  @@map("detalle_turno")
+}
+
+model OcupacionBahia {
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bahiaId             String        @map("bahia_id") @db.Uuid
+  turnoId             String?       @map("turno_id") @db.Uuid
+  tipo                TipoOcupacion
+  motivo              String?
+  creadoPorUsuarioId  String?       @map("creado_por_usuario_id") @db.Uuid
+  inicio              DateTime      @db.Timestamptz(6)
+  fin                 DateTime      @db.Timestamptz(6)
+  activo              Boolean       @default(true)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  bahia     Bahia    @relation(fields: [bahiaId], references: [id], onDelete: Cascade)
+  turno     Turno?   @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  creadoPor Usuario? @relation("BloqueoCreador", fields: [creadoPorUsuarioId], references: [id], onDelete: SetNull)
+
+  @@index([bahiaId, inicio, fin])
+  @@map("ocupacion_bahia")
+}
+
+model EventoTurno {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  turnoId     String       @map("turno_id") @db.Uuid
+  usuarioId   String?      @map("usuario_id") @db.Uuid
+  estadoPrev  EstadoTurno? @map("estado_prev")
+  estadoNuevo EstadoTurno  @map("estado_nuevo")
+  detalle     String?
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  turno   Turno    @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@map("evento_turno")
+}
+
+model OperacionApi {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  idempotencyKey     String   @map("idempotency_key")
+  requestFingerprint String   @map("request_fingerprint")
+  operacion          String
+  respuesta          Json
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, idempotencyKey])
+  @@map("operacion_api")
+}
+
+model Movimiento {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  entidad   String
+  entidadId String   @map("entidad_id") @db.Uuid
+  accion    String
+  detalle   Json?
+  usuarioId String?  @map("usuario_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, createdAt(sort: Desc)])
+  @@index([entidad, entidadId])
+  @@map("movimiento")
+}
+
+model WhatsappAccount {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId           String   @map("empresa_id") @db.Uuid
+  userId              String?  @map("user_id") @db.Uuid
+  phoneNumberId       String   @map("phone_number_id")
+  displayPhoneNumber  String?  @map("display_phone_number")
+  wabaId              String?  @map("waba_id")
+  label               String?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa       Empresa           @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  user          Usuario?          @relation("WahAccountOwner", fields: [userId], references: [id], onDelete: SetNull)
+  conversations WahConversation[]
+
+  @@unique([empresaId, phoneNumberId], map: "whatsapp_accounts_empresa_phone_key")
+  @@index([empresaId, active], map: "ix_whatsapp_accounts_empresa_active")
+  /// Partial UNIQUE index `whatsapp_accounts_user_id_uidx` (WHERE user_id IS NOT NULL) — see migration 182000
+  @@map("whatsapp_accounts")
+}
+
+model WahConversation {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId          String    @map("empresa_id") @db.Uuid
+  accountId          String    @map("account_id") @db.Uuid
+  clienteId          String?   @map("cliente_id") @db.Uuid
+  waContactId        String    @map("wa_contact_id")
+  contactName        String?   @map("contact_name")
+  contactPhone       String    @map("contact_phone")
+  lastMessageAt      DateTime? @map("last_message_at") @db.Timestamptz(6)
+  lastMessagePreview String?   @map("last_message_preview")
+  unreadCount        Int       @default(0) @map("unread_count")
+  botPaused          Boolean   @default(false) @map("bot_paused")
+  pendingHuman       Boolean   @default(false) @map("pending_human")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  empresa  Empresa         @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  account  WhatsappAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  cliente  Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  messages WahMessage[]
+
+  @@unique([accountId, waContactId], map: "wah_conversations_account_contact_key")
+  @@index([empresaId, lastMessageAt(sort: Desc)], map: "ix_wah_conversations_empresa_last_message")
+  @@index([empresaId, pendingHuman], map: "ix_wah_conversations_empresa_pending")
+  @@index([empresaId, unreadCount], map: "ix_wah_conversations_empresa_unread")
+  @@map("wah_conversations")
+}
+
+model WahMedia {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String   @map("empresa_id") @db.Uuid
+  messageId   String   @unique @map("message_id") @db.Uuid
+  metaMediaId String?  @map("meta_media_id")
+  mimeType    String   @map("mime_type")
+  fileName    String   @map("file_name")
+  storagePath String   @map("storage_path")
+  fileSize    Int?     @map("file_size")
+  sha256      String?
+  caption     String?
+  width       Int?
+  height      Int?
+  durationMs  Int?     @map("duration_ms")
+  voice       Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa Empresa    @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  message WahMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId, createdAt(sort: Desc)], map: "ix_wah_media_empresa_created")
+  @@index([messageId], map: "wah_media_message_idx")
+  @@map("wah_media")
+}
+
+model WahMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId      String   @map("empresa_id") @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  direction      String
+  senderType     String   @map("sender_type")
+  messageType    String   @default("text") @map("message_type")
+  body           String?
+  wamid          String?
+  senderUserId   String?  @map("sender_user_id") @db.Uuid
+  status         String   @default("sent")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  empresa      Empresa         @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  conversation WahConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser   Usuario?        @relation("WahMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+  media        WahMedia?
+
+  @@index([conversationId, createdAt(sort: Asc)], map: "ix_wah_messages_conversation_created")
+  @@index([empresaId, createdAt(sort: Desc)], map: "ix_wah_messages_empresa_created")
+  @@map("wah_messages")
+}

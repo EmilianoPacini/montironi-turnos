@@ -1,0 +1,26 @@
+---
+description: Datos de dominio persisten en PostgreSQL; nunca simular estado de producto solo en el frontend.
+alwaysApply: true
+---
+
+# Persistencia de dominio (producto final)
+
+Montironi Turnos es un producto de cliente. Alta, edición y baja de datos de negocio se persisten en PostgreSQL vía Prisma y server actions / APIs. El frontend muestra y envía; no es la fuente de verdad.
+
+Incluye: servicios, intervalos km, turnos, ocupación, clientes, vehículos, sesiones, WAH.
+
+```ts
+// ❌ BAD — solo estado de React, se pierde al recargar
+const [intervalos, setIntervalos] = useState(props.intervalos);
+setIntervalos([...intervalos, nuevo]);
+
+// ✅ GOOD — misma action/servicio que el recuadro del panel; upsert en DB
+await upsertIntervaloKm({ servicioId, empresaId, tipoVehiculo, condicion, intervaloKm });
+revalidatePath("/servicios");
+```
+
+- Reutilizar `upsertIntervaloKm` / `saveIntervaloAction` (unique `servicioId + tipoVehiculo + condicion`).
+- Tras guardar, el listado debe leer de DB (`listServiciosConIntervalos`), no de memoria.
+- Tras un write, invalidar **todas** las rutas que leen ese dato (`revalidateDomainSurfaces`), no solo la pantalla del formulario.
+- Un servicio nuevo debe ofertarse en talleres/bahías (`offerServicioInEmpresa`); si no, no aparece al crear un turno.
+- No inventar IDs ni catálogo en el cliente. Tenancy: siempre `empresaId` del actor.

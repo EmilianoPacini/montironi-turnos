@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EstadoTurno } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
@@ -21,6 +20,7 @@ import { updateConfiguracionTaller, createServicio } from "@/lib/modules/catalog
 import { upsertIntervaloKm } from "@/lib/modules/catalog/intervalo.service";
 import { createBahia, updateBahia } from "@/lib/modules/catalog/bahia.service";
 import { assertAdminRole } from "@/lib/auth/guards";
+import { revalidateDomainSurfaces } from "@/lib/revalidate-domain";
 import { CondicionVehiculo, TipoVehiculo } from "@prisma/client";
 import {
   formActionError,
@@ -215,7 +215,7 @@ export async function createTurnoAction(
       confirmar: values.confirmar,
     });
 
-    revalidatePath("/agenda");
+    revalidateDomainSurfaces([], "agenda");
     redirect("/agenda");
   } catch (e) {
     if (isDomainError(e)) {
@@ -241,8 +241,7 @@ export async function confirmTurnoAction(turnoId: string, version: number) {
       usuarioId: session.userId,
       version,
     });
-    revalidatePath("/agenda");
-    revalidatePath(`/turnos/${turnoId}`);
+    revalidateDomainSurfaces([`/turnos/${turnoId}`], "agenda");
     return { success: true as const };
   } catch (e) {
     if (isDomainError(e)) return { error: e.message, code: e.code };
@@ -265,8 +264,7 @@ export async function transitionTurnoAction(
       version,
       usuarioId: session.userId,
     });
-    revalidatePath("/agenda");
-    revalidatePath(`/turnos/${turnoId}`);
+    revalidateDomainSurfaces([`/turnos/${turnoId}`], "agenda");
     return { success: true as const };
   } catch (e) {
     if (isDomainError(e)) return { error: e.message, code: e.code };
@@ -285,8 +283,7 @@ export async function cancelTurnoAction(turnoId: string, version: number, motivo
       usuarioId: session.userId,
       motivo,
     });
-    revalidatePath("/agenda");
-    revalidatePath(`/turnos/${turnoId}`);
+    revalidateDomainSurfaces([`/turnos/${turnoId}`], "agenda");
     return { success: true as const };
   } catch (e) {
     if (isDomainError(e)) return { error: e.message, code: e.code };
@@ -321,7 +318,7 @@ export async function rescheduleTurnoAction(
       version: Number(formData.get("version")),
       usuarioId: session.userId,
     });
-    revalidatePath("/agenda");
+    revalidateDomainSurfaces([`/turnos/${turnoId}`], "agenda");
     redirect(`/turnos/${turnoId}`);
   } catch (e) {
     if (isDomainError(e)) {
@@ -362,7 +359,7 @@ export async function blockBahiaAction(
       motivo: values.motivo,
       usuarioId: session.userId,
     });
-    revalidatePath("/agenda");
+    revalidateDomainSurfaces([], "agenda");
     redirect("/agenda");
   } catch (e) {
     if (isDomainError(e)) {
@@ -382,7 +379,7 @@ export async function removeBlockAction(blockId: string) {
   try {
     const session = await requireSession();
     await removeBlock(blockId, session.empresaId);
-    revalidatePath("/agenda");
+    revalidateDomainSurfaces([], "agenda");
     return { success: true as const };
   } catch (e) {
     if (isDomainError(e)) return { error: e.message, code: e.code };
@@ -448,7 +445,7 @@ export async function saveClienteAction(
       });
     }
 
-    revalidatePath("/clientes");
+    revalidateDomainSurfaces([], "clientes");
     redirect("/clientes");
   } catch (e) {
     if (e instanceof ClienteValidationError) {
@@ -480,7 +477,7 @@ export async function createClienteInlineAction(formData: FormData) {
       apellido: values.apellido,
       telefono: values.telefono,
     });
-    revalidatePath("/clientes");
+    revalidateDomainSurfaces([], "clientes");
     return {
       cliente: {
         id: cliente.id,
@@ -526,7 +523,7 @@ export async function createVehiculoInlineAction(formData: FormData) {
         ? Number(values.kilometrajeActual)
         : undefined,
     });
-    revalidatePath("/clientes");
+    revalidateDomainSurfaces([], "clientes");
     return { vehiculo };
   } catch (e) {
     if (e instanceof ClienteValidationError) {
@@ -569,7 +566,7 @@ export async function saveVehiculoAction(
         : undefined,
       clienteId,
     });
-    revalidatePath("/clientes");
+    revalidateDomainSurfaces([], "clientes");
     if (clienteId) redirect(`/clientes/${clienteId}#vehiculos`);
     redirect("/clientes");
   } catch (e) {
@@ -610,7 +607,7 @@ export async function saveServicioAction(formData: FormData): Promise<void> {
       precio: Number(formData.get("precio")),
       modoPrecio: String(formData.get("modoPrecio") ?? "fijo") as "fijo" | "desde" | "a_presupuestar",
     });
-    revalidatePath("/servicios");
+    revalidateDomainSurfaces([], "catalogo");
     redirect("/servicios");
   } catch (e) {
     handleFormError(e, "/servicios");
@@ -631,28 +628,58 @@ export async function saveConfigAction(formData: FormData): Promise<void> {
       empresaId: session.empresaId,
       margenMinutos: Number(formData.get("margenMinutos")),
     });
-    revalidatePath("/configuracion");
+    revalidateDomainSurfaces(["/configuracion"], "catalogo");
     redirect("/configuracion");
   } catch (e) {
     handleFormError(e, "/configuracion");
   }
 }
 
+function serviciosReturnPath(servicioId: string): string {
+  if (!servicioId) return "/servicios";
+  return `/servicios?detalle=${encodeURIComponent(servicioId)}`;
+}
+
 export async function saveIntervaloAction(formData: FormData): Promise<void> {
+  const servicioId = String(formData.get("servicioId") ?? "");
+  const returnPath = serviciosReturnPath(servicioId);
+
   try {
     const session = await requireSession();
-    assertAdminRole(session.rol);
+    try {
+      assertAdminRole(session.rol);
+    } catch {
+      redirect("/agenda");
+    }
+
+    const intervaloKm = Number(formData.get("intervaloKm"));
+    if (!servicioId) {
+      redirectWithError("/servicios", "Seleccioná un servicio");
+    }
+    if (!Number.isInteger(intervaloKm) || intervaloKm < 1) {
+      redirectWithError(returnPath, "El intervalo de km debe ser un entero mayor a 0");
+    }
+
+    const tipoVehiculo = String(formData.get("tipoVehiculo"));
+    const condicion = String(formData.get("condicion"));
+    if (!Object.values(TipoVehiculo).includes(tipoVehiculo as TipoVehiculo)) {
+      redirectWithError(returnPath, "Tipo de vehículo inválido");
+    }
+    if (!Object.values(CondicionVehiculo).includes(condicion as CondicionVehiculo)) {
+      redirectWithError(returnPath, "Condición de vehículo inválida");
+    }
+
     await upsertIntervaloKm({
-      servicioId: String(formData.get("servicioId")),
+      servicioId,
       empresaId: session.empresaId,
-      tipoVehiculo: String(formData.get("tipoVehiculo")) as TipoVehiculo,
-      condicion: String(formData.get("condicion")) as CondicionVehiculo,
-      intervaloKm: Number(formData.get("intervaloKm")),
+      tipoVehiculo: tipoVehiculo as TipoVehiculo,
+      condicion: condicion as CondicionVehiculo,
+      intervaloKm,
     });
-    revalidatePath("/servicios");
-    redirect("/servicios");
+    revalidateDomainSurfaces([], "catalogo");
+    redirect(returnPath);
   } catch (e) {
-    handleFormError(e, "/servicios");
+    handleFormError(e, returnPath);
   }
 }
 
@@ -678,7 +705,7 @@ export async function saveBahiaAction(formData: FormData): Promise<void> {
         usuarioId: session.userId,
       });
     }
-    revalidatePath("/bahias");
+    revalidateDomainSurfaces([], "catalogo");
     redirect("/bahias");
   } catch (e) {
     handleFormError(e, "/bahias");

@@ -1,6 +1,7 @@
 import prisma from "@/lib/db";
 import { DomainError } from "@/lib/modules/appointments/errors";
 import { registrarMovimiento } from "@/lib/modules/audit/movimiento.service";
+import { offerEmpresaServiciosInBahia } from "@/lib/modules/catalog/oferta";
 
 export async function listBahiasTaller(tallerId: string, empresaId: string) {
   return prisma.bahia.findMany({
@@ -40,11 +41,15 @@ export async function createBahia(params: {
       tallerId: params.tallerId,
       nombre: params.nombre,
       orden: params.orden ?? (maxOrden._max.orden ?? 0) + 1,
-      bahiaServicios: params.servicioIds?.length
-        ? { create: params.servicioIds.map((servicioId) => ({ servicioId })) }
-        : undefined,
     },
   });
+
+  await offerEmpresaServiciosInBahia(
+    prisma,
+    params.empresaId,
+    bahia.id,
+    params.servicioIds
+  );
 
   await registrarMovimiento({
     empresaId: params.empresaId,

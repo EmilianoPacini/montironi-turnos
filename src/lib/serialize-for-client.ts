@@ -48,3 +48,33 @@ export function mapServicioForClient(s: {
     modoPrecio: s.modoPrecio,
   };
 }
+
+export function mapServicioCatalogForClient(s: {
+  id: string;
+  nombre: string;
+  duracionMin: number;
+  modoPrecio: ModoPrecio | string;
+  precio: Decimal | number | string;
+  tipoServicio: { nombre: string };
+  intervalosKm: Array<{
+    id: string;
+    tipoVehiculo: string;
+    condicion: string;
+    intervaloKm: number;
+  }>;
+}) {
+  return {
+    id: s.id,
+    nombre: s.nombre,
+    tipoNombre: s.tipoServicio.nombre,
+    duracionMin: s.duracionMin,
+    precio: toNumber(s.precio),
+    modoPrecio: String(s.modoPrecio),
+    intervalos: s.intervalosKm.map((intervalo) => ({
+      id: intervalo.id,
+      tipoVehiculo: intervalo.tipoVehiculo,
+      condicion: intervalo.condicion,
+      intervaloKm: intervalo.intervaloKm,
+    })),
+  };
+}
