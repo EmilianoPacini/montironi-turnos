@@ -1,5 +1,8 @@
 # Servicios de dominio — Montironi Turnos V1
 
+> Consumidores IA: contrato HTTP y playbooks en [`AGENT_CONSUMER_GUIDE.md`](./AGENT_CONSUMER_GUIDE.md).  
+> Esta página describe dominio interno. Donde diverja (p.ej. HTTP de `BloqueoInvalido`, snapshots al crear vs al confirmar, lista incompleta de rutas v1), gana el código + la guía de agentes.
+
 Alineado a: `prisma/migrations/20260911152000_authoritative_init/migration.sql`, backlog P0 (MT-P0-01…06), decisiones de producto cerradas.
 
 Stack: monolito Next.js modular. Tenancy: todo filtrado por `empresa_id` del actor.

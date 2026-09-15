@@ -132,6 +132,8 @@ Ver contrato completo en [`docs/DOMAIN_SERVICES.md`](docs/DOMAIN_SERVICES.md).
 
 ## API para agentes
 
+Contrato operativo (auth, actions, FSM, playbooks): [`docs/AGENT_CONSUMER_GUIDE.md`](docs/AGENT_CONSUMER_GUIDE.md).
+
 `POST /api/agents` y `GET /api/agents`
 
 Headers:
