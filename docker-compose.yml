@@ -1,21 +1,30 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: montironi-postgres
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: montironi-app
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: montironi
-      POSTGRES_PASSWORD: montironi
-      POSTGRES_DB: montironi_turnos
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "5433:5432"
+      - "43123:43123"
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-${DATABASE_URL:-postgresql://montironi:montironi@host.docker.internal:5432/montironi_turnos?schema=public}}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-string-at-least-32-characters}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      AGENT_API_KEY: ${AGENT_API_KEY:-your-agent-api-key}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Cima AI}
+      CIMA_FORWARD_SECRET: ${CIMA_FORWARD_SECRET:-change-me-cima-forward-secret}
+      META_WHATSAPP_ACCESS_TOKEN: ${META_WHATSAPP_ACCESS_TOKEN:-}
+      WAH_MESSAGE_WEBHOOK_URL: ${WAH_MESSAGE_WEBHOOK_URL:-}
+      WAH_MEDIA_DIR: /app/data/wah-media
+      WAH_SEND_FILES_DIR: /app/data/wah-send
+      AUTO_SEED: ${AUTO_SEED:-true}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U montironi -d montironi_turnos"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - wah_media:/app/data/wah-media
+      - wah_send:/app/data/wah-send
 
 volumes:
-  postgres_data:
+  wah_media:
+  wah_send:

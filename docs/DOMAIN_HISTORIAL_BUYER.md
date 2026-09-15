@@ -35,8 +35,8 @@ Idempotente: omite turnos que ya tienen filas en `historial_servicio`.
 
 ## Clasificación buyer
 
-`POST /api/v1/clientes/:id/clasificaciones` (x-api-key o sesión)  
-`POST /api/agents` `{ "action": "clasificar_cliente", ... }`
+`POST /api/agents` `{ "action": "clasificar_cliente", ... }` — **canónico para agentes** (ver `docs/AGENT_CONSUMER_GUIDE.md`).  
+`POST /api/v1/clientes/:id/clasificaciones` — el handler acepta x-api-key o sesión, pero **Edge exige cookie** en `/api/v1/*` (salvo jobs). Un agente M2M no debe usar esta ruta.
 
 Body:
 ```json

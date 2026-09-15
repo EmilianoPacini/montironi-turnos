@@ -1,5 +1,8 @@
 # API agentes — contexto rápido cliente (WSP / n8n)
 
+> **Canónico para consumidores IA:** [`AGENT_CONSUMER_GUIDE.md`](./AGENT_CONSUMER_GUIDE.md).  
+> Esta página es pista. Divergencia: `POST /api/v1/clientes/:id/clasificaciones` **no** es usable con solo `x-api-key` (Edge exige cookie). Usar `POST /api/agents` `clasificar_cliente`.
+
 **Prioridad:** una sola lectura de contexto para el bot WhatsApp.  
 **Auth:** `x-api-key: AGENT_API_KEY`. **Idempotencia:** no aplica (GET).
 

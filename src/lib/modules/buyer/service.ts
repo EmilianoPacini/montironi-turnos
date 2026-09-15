@@ -1,6 +1,17 @@
+<<<<<<< HEAD
 import type { Prisma } from "@prisma/client";
+=======
+import { Prisma } from "@prisma/client";
+>>>>>>> deploy-docker
 import prisma from "@/lib/db";
 import { DomainError } from "@/lib/modules/appointments/errors";
+
+function toInputJson(
+  value: Record<string, unknown> | undefined,
+): Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  return value as Prisma.InputJsonValue;
+}
 
 export type ClasificacionFuente = "bot" | "humano" | "sistema" | "integracion";
 
@@ -86,7 +97,11 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         intencion: input.intencion,
         tagsDelta,
         scoreReclamosDelta: scoreDelta,
+<<<<<<< HEAD
         payload: jsonPayload,
+=======
+        payload: toInputJson(input.payload),
+>>>>>>> deploy-docker
         actorUsuarioId: input.actorUsuarioId,
       },
     });
@@ -94,13 +109,18 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
     const mergedTags = mergeTags(existing?.tags ?? [], tagsDelta);
     const scoreReclamos = Math.max(0, (existing?.scoreReclamos ?? 0) + scoreDelta);
 
+<<<<<<< HEAD
     const update: Prisma.ClientePerfilBuyerUncheckedUpdateInput = {
+=======
+    const updateData: Prisma.ClientePerfilBuyerUncheckedUpdateInput = {
+>>>>>>> deploy-docker
       tags: mergedTags,
       scoreReclamos,
       ultimaClasificacion: input.clasificacion,
       ultimaClasificacionEn: now,
     };
     if (input.intencion !== undefined) {
+<<<<<<< HEAD
       update.intencionPredominante = input.intencion;
     }
     if (input.wahConversationId !== undefined) {
@@ -108,6 +128,15 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
     }
     if (jsonPayload !== undefined) {
       update.metadata = jsonPayload;
+=======
+      updateData.intencionPredominante = input.intencion;
+    }
+    if (input.wahConversationId !== undefined) {
+      updateData.wahConversationId = input.wahConversationId;
+    }
+    if (input.payload !== undefined) {
+      updateData.metadata = toInputJson(input.payload);
+>>>>>>> deploy-docker
     }
 
     const perfil = await tx.clientePerfilBuyer.upsert({
@@ -121,9 +150,15 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         ultimaClasificacion: input.clasificacion,
         ultimaClasificacionEn: now,
         wahConversationId: input.wahConversationId,
+<<<<<<< HEAD
         metadata: jsonPayload,
       },
       update,
+=======
+        metadata: toInputJson(input.payload),
+      },
+      update: updateData,
+>>>>>>> deploy-docker
     });
 
     await tx.clienteClasificacionEvento.update({
