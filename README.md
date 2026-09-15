@@ -4,11 +4,32 @@ Agenda compartida de turnos para concesionaria/taller. Empleados (panel web) y a
 
 ## Requisitos
 
-- Node.js 20+
-- Docker y Docker Compose (para PostgreSQL)
-- npm
+- Docker y Docker Compose (forma recomendada)
+- PostgreSQL ya en ejecución (este repo **no** levanta la base)
+- Node.js 22+ y npm (solo si corrés la app en el host)
 
-## Puesta en marcha (comandos exactos)
+## Puesta en marcha con Docker (recomendado)
+
+El compose solo levanta Next.js. Postgres tiene que existir de antemano.
+
+```bash
+cp .env.example .env
+# Ajustá DOCKER_DATABASE_URL a tu Postgres.
+# Misma máquina que Docker: host.docker.internal (no localhost).
+# Otro host: hostname o IP de ese servidor.
+
+docker compose up --build
+```
+
+Al arrancar, el contenedor espera la DB, corre `prisma migrate deploy` y, si la base está vacía, el seed.
+
+Abrí [http://localhost:43123/login](http://localhost:43123/login). Credenciales abajo.
+
+Opcional: secretos (`SESSION_SECRET`, `AGENT_API_KEY`, WhatsApp) en `.env`.
+
+Para no sembrar datos de prueba: `AUTO_SEED=false docker compose up --build`.
+
+## Puesta en marcha en el host (comandos exactos)
 
 ```bash
 # 1) Dependencias
@@ -16,27 +37,24 @@ npm install
 
 # 2) Variables de entorno
 cp .env.example .env
+# DATABASE_URL debe apuntar a tu Postgres (localhost si está en esta máquina)
 
-# 3) PostgreSQL (Docker Compose — puerto 5433)
-docker compose up -d
-# Esperar healthcheck: docker compose ps
-
-# 4) Migraciones + seed (desarrollo — resetea la DB)
+# 3) Migraciones + seed (desarrollo — resetea la DB)
 npx prisma migrate reset --force
 
 # Alternativa sin reset (CI / prod local):
 # npm run db:setup    # prisma migrate deploy && seed
 
-# 5) Tests
+# 4) Tests
 npm run test
 
-# 6) Servidor de desarrollo
+# 5) Servidor de desarrollo
 npm run dev
 ```
 
 Abrí [http://localhost:43123/login](http://localhost:43123/login) → credenciales abajo → redirige a `/agenda`.
 
-**Conexión DB (Docker):** `postgresql://montironi:montironi@localhost:5433/montironi_turnos` (ver `.env.example`).
+**Conexión DB (desde el host):** `postgresql://montironi:montironi@localhost:5432/montironi_turnos` (ver `.env.example`; cambiá host/puerto/credenciales).
 
 **Verificación rápida:**
 
@@ -59,7 +77,7 @@ V1 del panel usa solo roles `admin` y `empleado` (el enum incluye también `oper
 
 | Comando | Descripción |
 |---------|-------------|
-| `docker compose up -d` | PostgreSQL en `:5433` |
+| `docker compose up --build` | Solo la app Next.js (usa Postgres externo; migrate + seed si la DB está vacía) |
 | `npx prisma migrate reset --force` | Reset + migrar + seed (dev) |
 | `npm run db:setup` | `migrate deploy` + seed (sin reset) |
 | `npm run db:seed` | Solo seed |
@@ -113,6 +131,8 @@ Ver contrato completo en [`docs/DOMAIN_SERVICES.md`](docs/DOMAIN_SERVICES.md).
 - **Precios:** modos `fijo`, `desde`, `a_presupuestar` (informativos en V1); se snapshotean en `detalle_turno` al reservar
 
 ## API para agentes
+
+Contrato operativo (auth, actions, FSM, playbooks): [`docs/AGENT_CONSUMER_GUIDE.md`](docs/AGENT_CONSUMER_GUIDE.md).
 
 `POST /api/agents` y `GET /api/agents`
 

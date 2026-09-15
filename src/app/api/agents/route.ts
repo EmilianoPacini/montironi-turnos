@@ -44,22 +44,25 @@ function errorResponse(e: unknown) {
 }
 
 async function requireEmpresa(request: NextRequest) {
-  if (!validateAgentApiKey(request)) return { response: unauthorized() };
+  if (!validateAgentApiKey(request)) {
+    return { ok: false as const, response: unauthorized() };
+  }
   const resolved = await resolveAgentEmpresa(request);
   if (!resolved.ok) {
     return {
+      ok: false as const,
       response: NextResponse.json(
         { error: resolved.error, code: resolved.status === 403 ? "FORBIDDEN" : "NOT_FOUND" },
         { status: resolved.status }
       ),
     };
   }
-  return { empresa: resolved.empresa };
+  return { ok: true as const, empresa: resolved.empresa };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireEmpresa(request);
-  if ("response" in auth) return auth.response;
+  if (!auth.ok) return auth.response;
   const { empresa } = auth;
 
   const { searchParams } = new URL(request.url);
@@ -197,9 +200,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const auth = await requireEmpresa(request);
-  if ("response" in auth) return auth.response;
+  if (!auth.ok) return auth.response;
   const { empresa } = auth;
 
   const idempotencyKey = request.headers.get("idempotency-key");

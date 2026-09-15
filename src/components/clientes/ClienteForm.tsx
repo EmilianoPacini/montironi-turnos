@@ -32,11 +32,7 @@ function initialClienteFields(cliente?: ClienteFormCliente): ClienteFormValues {
   };
 }
 
-export function ClienteForm({
-  cliente,
-}: {
-  cliente?: ClienteFormCliente;
-}) {
+export function ClienteForm({ cliente }: { cliente?: ClienteFormCliente }) {
   const isNew = !cliente;
   const [state, formAction, pending] = useActionState(
     saveClienteAction,

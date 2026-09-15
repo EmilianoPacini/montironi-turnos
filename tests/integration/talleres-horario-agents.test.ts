@@ -26,18 +26,18 @@ import { listTalleresForAgents } from "@/lib/modules/catalog/taller-agents";
 const apiKey = process.env.AGENT_API_KEY ?? "montironi-agent-api-key-dev";
 
 function weekdaySnapshot(horaFin: string) {
-  const weekdays = [
+  const weekdays = new Set<DiaSemana>([
     DiaSemana.lunes,
     DiaSemana.martes,
     DiaSemana.miercoles,
     DiaSemana.jueves,
     DiaSemana.viernes,
-  ];
+  ]);
   return canonicalWeeklySnapshot(
     Object.values(DiaSemana).map((dia) => ({
       dia,
-      activo: weekdays.includes(dia),
-      franjas: weekdays.includes(dia)
+      activo: weekdays.has(dia),
+      franjas: weekdays.has(dia)
         ? [{ horaInicio: "08:00", horaFin }]
         : [],
     }))
