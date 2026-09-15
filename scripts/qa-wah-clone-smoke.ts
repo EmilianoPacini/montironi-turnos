@@ -30,8 +30,11 @@ async function main() {
   const cookie = `montironi_session=${sealed}`;
   const secret = process.env.CIMA_FORWARD_SECRET || "";
 
-  async function req(path: string, opts: RequestInit & { json?: unknown; headers?: Record<string, string> } = {}) {
-    const headers: Record<string, string> = { cookie, ...(opts.headers || {}) };
+  async function req(
+    path: string,
+    opts: { method?: string; json?: unknown; headers?: Record<string, string>; body?: BodyInit } = {}
+  ) {
+    const headers: Record<string, string> = { cookie, ...(opts.headers ?? {}) };
     let body = opts.body as string | undefined;
     if (opts.json !== undefined) {
       headers["content-type"] = "application/json";
