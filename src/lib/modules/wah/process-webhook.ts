@@ -6,6 +6,7 @@ import {
   persistInboundMessage,
 } from "@/lib/modules/wah/conversation.service";
 import { downloadWhatsAppMedia } from "@/lib/modules/wah/meta-client";
+import { shouldApplyStatusUpdate } from "@/lib/modules/wah/message-status";
 import { normalizeContactPhone } from "@/lib/modules/wah/phone";
 import {
   WAH_MESSAGE_TYPE,
@@ -147,15 +148,19 @@ async function processInboundWebhookMessage(params: {
   let mediaPayload: Parameters<typeof persistInboundMessage>[0]["media"];
 
   if (parsed.metaMediaId) {
-    const downloaded = await downloadWhatsAppMedia(parsed.metaMediaId);
-    mediaPayload = {
-      buffer: downloaded.buffer,
-      mimeType: parsed.mimeType ?? downloaded.mimeType,
-      fileName: parsed.fileName ?? `${parsed.messageType}-${parsed.metaMediaId}`,
-      metaMediaId: parsed.metaMediaId,
-      caption: parsed.caption,
-      voice: parsed.voice,
-    };
+    try {
+      const downloaded = await downloadWhatsAppMedia(parsed.metaMediaId);
+      mediaPayload = {
+        buffer: downloaded.buffer,
+        mimeType: parsed.mimeType ?? downloaded.mimeType,
+        fileName: parsed.fileName ?? `${parsed.messageType}-${parsed.metaMediaId}`,
+        metaMediaId: parsed.metaMediaId,
+        caption: parsed.caption,
+        voice: parsed.voice,
+      };
+    } catch {
+      // Persist message even when Meta media download fails (invalid token, etc.).
+    }
   }
 
   const persisted = await persistInboundMessage({
@@ -193,12 +198,20 @@ async function processInboundWebhookMessage(params: {
 }
 
 async function processMessageStatusUpdate(status: MetaMessageStatus) {
-  const updated = await prisma.wahMessage.updateMany({
+  const existing = await prisma.wahMessage.findFirst({
     where: { wamid: status.id },
+    select: { id: true, status: true },
+  });
+  if (!existing || !shouldApplyStatusUpdate(existing.status, status.status)) {
+    return { wamid: status.id, status: status.status, updated: 0 };
+  }
+
+  await prisma.wahMessage.update({
+    where: { id: existing.id },
     data: { status: status.status },
   });
 
-  return { wamid: status.id, status: status.status, updated: updated.count };
+  return { wamid: status.id, status: status.status, updated: 1 };
 }
 
 function parseInboundMessage(message: MetaInboundMessage): {

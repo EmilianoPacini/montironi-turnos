@@ -5,7 +5,10 @@ import {
   resolveAgentEmpresa,
 } from "@/lib/modules/agents-api/idempotency";
 import { dispatchAgentAction } from "@/lib/modules/agents-api/dispatch";
-import { listServicios } from "@/lib/modules/catalog/service";
+import {
+  getServicioForAgents,
+  listServiciosForAgents,
+} from "@/lib/modules/catalog/servicio-agents";
 import { listTalleresForAgents } from "@/lib/modules/catalog/taller-agents";
 import {
   aggregateVentanas,
@@ -67,8 +70,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (resource === "servicios") {
-      const servicios = await listServicios(empresa.id);
+      const servicios = await listServiciosForAgents(empresa.id);
       return NextResponse.json({ servicios });
+    }
+
+    if (resource === "servicio") {
+      const id = searchParams.get("id");
+      if (!id) {
+        return NextResponse.json({ error: "id requerido" }, { status: 400 });
+      }
+      const servicio = await getServicioForAgents({ empresaId: empresa.id, id });
+      if (!servicio) {
+        return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+      }
+      return NextResponse.json({ servicio });
     }
 
     if (resource === "talleres") {
@@ -170,6 +185,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       endpoints: [
         "GET ?resource=servicios",
+        "GET ?resource=servicio&id=",
         "GET ?resource=talleres&servicioId=",
         "GET ?resource=proximos_slots&servicioId=&tallerId=&desde=&limite=",
         "GET ?resource=disponibilidad&tallerId=&fecha=&servicioId=",

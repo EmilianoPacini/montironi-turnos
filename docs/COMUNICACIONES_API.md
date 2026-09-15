@@ -162,15 +162,29 @@ Response:
 
 ---
 
+## Media en panel
+
+Patrón alineado a cima-ai: todo mensaje con adjunto (inbound o outbound bot) puede tener fila en `wah_media` y verse en `/comunicaciones` vía `GET /api/wah/media/:mediaId`.
+
+| Origen | Persistencia local |
+|--------|-------------------|
+| Inbound (webhook Meta) | Descarga desde Graph → `WAH_MEDIA_DIR` |
+| Outbound bot (`send-audio`, `send-file`) | Descarga best-effort de `audio_url` / `file_url` → `WAH_SEND_FILES_DIR` |
+
+- Si falla la copia local outbound, el envío a Meta **no** se revierte (HTTP 200 igual); el panel muestra placeholder de texto.
+- Inbound requiere `META_WHATSAPP_ACCESS_TOKEN` válido para descargar de Meta; si falla, el mensaje se persiste igual sin `wah_media`.
+
+---
+
 ## Env
 
 | Variable | Uso |
 |----------|-----|
 | `CIMA_FORWARD_SECRET` | Auth integración |
-| `META_WHATSAPP_ACCESS_TOKEN` | Graph API (opcional dev) |
+| `META_WHATSAPP_ACCESS_TOKEN` | Graph API envío + descarga inbound |
 | `WAH_MESSAGE_WEBHOOK_URL` | Webhook post-envío humano + inbound (cuando bot no pausado) |
 | `WAH_MEDIA_DIR` | Media inbound |
-| `WAH_SEND_FILES_DIR` | Media outbound |
+| `WAH_SEND_FILES_DIR` | Copia local outbound bot (panel) |
 
 ## Referencia
 
