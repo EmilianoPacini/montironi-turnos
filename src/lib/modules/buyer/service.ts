@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { DomainError } from "@/lib/modules/appointments/errors";
 
@@ -83,7 +84,7 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         intencion: input.intencion,
         tagsDelta,
         scoreReclamosDelta: scoreDelta,
-        payload: input.payload ?? undefined,
+        payload: input.payload as Prisma.InputJsonValue | undefined,
         actorUsuarioId: input.actorUsuarioId,
       },
     });
@@ -102,7 +103,7 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         ultimaClasificacion: input.clasificacion,
         ultimaClasificacionEn: now,
         wahConversationId: input.wahConversationId,
-        metadata: input.payload ?? undefined,
+        metadata: input.payload as Prisma.InputJsonValue | undefined,
       },
       update: {
         tags: mergedTags,
@@ -113,8 +114,10 @@ export async function clasificarCliente(input: ClasificarClienteInput) {
         ...(input.wahConversationId !== undefined
           ? { wahConversationId: input.wahConversationId }
           : {}),
-        ...(input.payload !== undefined ? { metadata: input.payload } : {}),
-      },
+        ...(input.payload !== undefined
+          ? { metadata: input.payload as Prisma.InputJsonValue }
+          : {}),
+      } satisfies Prisma.ClientePerfilBuyerUpdateInput,
     });
 
     await tx.clienteClasificacionEvento.update({

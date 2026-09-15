@@ -10,7 +10,17 @@ import { ClienteCoreFields } from "@/components/clientes/ClienteCoreFields";
 import { FormError } from "@/components/ui/FormError";
 import { useFormFieldErrors } from "@/components/ui/use-form-field-errors";
 
-function initialClienteFields(cliente?: ClienteForm["cliente"]): ClienteFormValues {
+type ClienteFormCliente = {
+  id: string;
+  nombre: string;
+  apellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  documento?: string | null;
+  notas?: string | null;
+};
+
+function initialClienteFields(cliente?: ClienteFormCliente): ClienteFormValues {
   return {
     nombre: cliente?.nombre ?? "",
     apellido: cliente?.apellido ?? "",
@@ -25,15 +35,7 @@ function initialClienteFields(cliente?: ClienteForm["cliente"]): ClienteFormValu
 export function ClienteForm({
   cliente,
 }: {
-  cliente?: {
-    id: string;
-    nombre: string;
-    apellido?: string | null;
-    email?: string | null;
-    telefono?: string | null;
-    documento?: string | null;
-    notas?: string | null;
-  };
+  cliente?: ClienteFormCliente;
 }) {
   const isNew = !cliente;
   const [state, formAction, pending] = useActionState(

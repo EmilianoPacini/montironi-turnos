@@ -114,7 +114,8 @@ export async function resolverAtencionVehiculo(params: {
     limit: 10,
   });
 
-  let ultimoHistorial = historial[0] ?? null;
+  let ultimoHistorial: ReturnType<typeof serializeHistorialRow> | null =
+    historial[0] ?? null;
   if (vehiculoId) {
     const rows = await prisma.historialServicio.findMany({
       where: { empresaId: params.empresaId, clienteId, vehiculoId },

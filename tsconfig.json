@@ -30,5 +30,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "tests",
+    "scripts",
+    "_sec_b1_pr5_review",
+    "_sec_b3_pr6_review"
+  ]
 }
