@@ -10,12 +10,63 @@ import {
   resumeWahBot,
   useWahConversationDetail,
 } from "@/components/wah/use-wah-api";
+import { wahStatusLabel, wahStatusTicks } from "@/lib/modules/wah/message-status";
 
 function senderLabel(m: WahMessage): string {
   if (m.senderType === "human") return "Humano";
   if (m.senderType === "bot") return "Bot";
   if (m.senderType === "integration") return "Integración";
   return "Contacto";
+}
+
+function isAiOutbound(m: WahMessage) {
+  return m.direction === "outbound" && (m.senderType === "bot" || m.senderType === "integration");
+}
+
+function mediaTypeLabel(type: string) {
+  if (type === "image") return "Imagen";
+  if (type === "audio") return "Audio";
+  if (type === "video") return "Video";
+  if (type === "document" || type === "file") return "Documento";
+  return type;
+}
+
+function WahMessageMedia({
+  media,
+  outbound,
+}: {
+  media: NonNullable<WahMessage["media"]>;
+  outbound: boolean;
+}) {
+  const src = `/api/wah/media/${media.id}`;
+  const linkClass = outbound ? "text-blue-100 underline" : "text-blue-700 underline";
+
+  if (media.mimeType.startsWith("image/")) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={media.fileName}
+        className="mt-1 block max-w-full rounded-lg"
+        loading="lazy"
+      />
+    );
+  }
+  if (media.mimeType.startsWith("audio/")) {
+    return (
+      <audio controls src={src} className="mt-1 max-w-full" style={{ width: 280 }} />
+    );
+  }
+  if (media.mimeType.startsWith("video/")) {
+    return (
+      <video controls src={src} className="mt-1 block max-w-full rounded-lg" />
+    );
+  }
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className={`mt-1 block text-xs ${linkClass}`}>
+      {media.fileName}
+    </a>
+  );
 }
 
 export function WahChatPanel({
@@ -111,28 +162,39 @@ export function WahChatPanel({
                       : "rounded-bl-md bg-slate-100 text-slate-900"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap break-words text-sm">
-                    {m.body ?? `[${m.messageType}]`}
-                  </p>
-                  {m.media ? (
-                    <a
-                      href={`/api/wah/media/${m.media.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`mt-1 block text-xs underline ${
-                        outbound ? "text-blue-100" : "text-blue-700"
-                      }`}
-                    >
-                      {m.media.fileName}
-                    </a>
+                  {m.body ? (
+                    <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                  ) : !m.media && m.messageType !== "text" ? (
+                    <p className="text-sm">{mediaTypeLabel(m.messageType)}</p>
                   ) : null}
+                  {m.media ? <WahMessageMedia media={m.media} outbound={outbound} /> : null}
                   <div
-                    className={`mt-1 flex items-center gap-2 text-[10px] ${
+                    className={`mt-1 flex flex-wrap items-center justify-end gap-2 text-[10px] ${
                       outbound ? "text-blue-100" : "text-slate-500"
                     }`}
                   >
-                    <span>{senderLabel(m)}</span>
+                    {isAiOutbound(m) ? (
+                      <span
+                        className={`rounded px-1.5 py-0.5 ring-1 ${
+                          outbound
+                            ? "bg-white/15 ring-white/30"
+                            : "bg-violet-50 text-violet-700 ring-violet-200"
+                        }`}
+                      >
+                        IA
+                      </span>
+                    ) : (
+                      <span>{senderLabel(m)}</span>
+                    )}
                     <span>{format(new Date(m.createdAt), "HH:mm", { locale: es })}</span>
+                    {outbound ? (
+                      <span
+                        title={wahStatusLabel(m.status)}
+                        style={{ color: wahStatusTicks(m.status).color }}
+                      >
+                        {wahStatusTicks(m.status).text}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>

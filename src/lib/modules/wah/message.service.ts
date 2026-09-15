@@ -1,5 +1,10 @@
 import prisma from "@/lib/db";
 import { getWahConfig } from "@/lib/modules/wah/config";
+import {
+  fetchMediaBuffer,
+  inferMimeTypeFromFilename,
+  persistOutboundMediaBestEffort,
+} from "@/lib/modules/wah/media.service";
 import { sendWhatsAppMedia, sendWhatsAppText } from "@/lib/modules/wah/meta-client";
 import { previewText } from "@/lib/modules/wah/phone";
 import {
@@ -197,6 +202,18 @@ async function sendIntegrationMedia(params: {
 
   if (!conversation) throw new Error("Conversación no encontrada");
 
+  const fileName = params.filename ?? "attachment";
+  let mediaBuffer: Buffer | null = null;
+  let mimeType = inferMimeTypeFromFilename(fileName);
+
+  try {
+    const fetched = await fetchMediaBuffer(params.mediaUrl, fileName);
+    mediaBuffer = fetched.buffer;
+    mimeType = fetched.mimeType;
+  } catch {
+    // Meta can still send via public link; panel may show placeholder only.
+  }
+
   const { wamid } = await sendWhatsAppMedia({
     phoneNumberId: account.phoneNumberId,
     to: params.to,
@@ -221,9 +238,22 @@ async function sendIntegrationMedia(params: {
         mediaUrl: params.mediaUrl,
         filename: params.filename,
         caption: params.caption,
+        generatedByAi: true,
       },
     },
   });
+
+  if (mediaBuffer) {
+    await persistOutboundMediaBestEffort({
+      empresaId: params.empresaId,
+      messageId: message.id,
+      buffer: mediaBuffer,
+      mimeType,
+      fileName,
+      caption: params.caption,
+      voice: params.mediaType === "audio",
+    });
+  }
 
   await touchConversationAfterMessage({
     conversationId: conversation.id,
@@ -231,7 +261,12 @@ async function sendIntegrationMedia(params: {
     preview: params.body,
   });
 
-  return { message, conversationId: conversation.id };
+  const messageWithMedia = await prisma.wahMessage.findUniqueOrThrow({
+    where: { id: message.id },
+    include: { media: true },
+  });
+
+  return { message: messageWithMedia, conversationId: conversation.id };
 }
 
 async function notifyMessageWebhook(payload: Record<string, unknown>) {
